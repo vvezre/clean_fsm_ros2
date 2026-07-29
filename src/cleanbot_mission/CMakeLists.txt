@@ -28,7 +28,11 @@ target_include_directories(mission_core
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(mission_core cleanbot_interfaces)
+ament_target_dependencies(
+  mission_core
+  cleanbot_common
+  cleanbot_interfaces
+)
 target_link_libraries(mission_core nlohmann_json::nlohmann_json)
 
 add_executable(mission_manager_node src/mission_manager_node.cpp)
@@ -86,5 +90,9 @@ endif()
 
 ament_export_include_directories(include)
 ament_export_libraries(mission_core)
-ament_export_dependencies(cleanbot_interfaces nlohmann_json)
+ament_export_dependencies(
+  cleanbot_common
+  cleanbot_interfaces
+  nlohmann_json
+)
 ament_package()

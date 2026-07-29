@@ -1,4 +1,5 @@
 #include "cleanbot_mission/maintenance_runtime.hpp"
+#include "cleanbot_common/publisher_epoch_tracker.hpp"
 
 #include <gtest/gtest.h>
 
@@ -8,9 +9,11 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace cleanbot {
 namespace mission {
@@ -92,6 +95,20 @@ static_assert(noexcept(
     std::declval<MaintenanceRuntime&>().initialize(true)));
 static_assert(noexcept(
     std::declval<MaintenanceRuntime&>().setMissionIdle(true)));
+static_assert(noexcept(
+    std::declval<MaintenanceRuntime&>().enable(
+        std::declval<const std::string&>(),
+        std::declval<const std::string&>(),
+        true)));
+static_assert(noexcept(
+    std::declval<MaintenanceRuntime&>().disable(
+        1u, std::declval<const std::string&>())));
+static_assert(noexcept(
+    std::declval<MaintenanceRuntime&>().observeFinalCommand(
+        std::declval<const FinalCommandEvidence&>())));
+static_assert(noexcept(
+    std::declval<MaintenanceRuntime&>().observeCommandStatus(
+        std::declval<const CommandStatusEvidence&>())));
 static_assert(noexcept(
     std::declval<const MaintenanceRuntime&>().snapshot()));
 static_assert(noexcept(
@@ -272,6 +289,267 @@ TEST(MaintenanceRuntimeTest, GateRestoreFailureLatchesStoreFault) {
   EXPECT_EQ(
       runtime.snapshot().blocker_code,
       "MAINTENANCE_STORE_FAULT");
+}
+
+TEST(MaintenanceRuntimeTest, EnablePersistsNewGenerationAndClosesAdmission) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, inactive_json(17u));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+
+  const auto result = runtime.enable("ota-updater", "install-v4", true);
+
+  EXPECT_TRUE(result.accepted);
+  EXPECT_TRUE(result.gate_active);
+  EXPECT_FALSE(result.ready);
+  EXPECT_EQ(result.generation, 18u);
+  EXPECT_EQ(result.code, "OK");
+  const auto& snapshot = runtime.snapshot();
+  EXPECT_TRUE(snapshot.admission_closed);
+  EXPECT_TRUE(snapshot.gate_active);
+  EXPECT_EQ(snapshot.generation, 18u);
+  EXPECT_EQ(snapshot.last_generation, 18u);
+  EXPECT_EQ(snapshot.requester, "ota-updater");
+  EXPECT_EQ(snapshot.reason, "install-v4");
+  EXPECT_NE(
+      read_bytes(state_path).find("\"lastGeneration\":18"),
+      std::string::npos);
+  EXPECT_NE(
+      read_bytes(state_path).find("\"state\":\"active\""),
+      std::string::npos);
+}
+
+TEST(MaintenanceRuntimeTest, SameOwnerEnableIsIdempotentAndKeepsOriginalReason) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, active_json(29u, "ota-updater", "original"));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+  const auto before = read_bytes(state_path);
+
+  const auto result =
+      runtime.enable("ota-updater", "replacement", true);
+
+  EXPECT_TRUE(result.accepted);
+  EXPECT_EQ(result.generation, 29u);
+  EXPECT_EQ(result.code, "ALREADY_ACTIVE");
+  EXPECT_TRUE(runtime.admissionClosed());
+  EXPECT_EQ(runtime.snapshot().reason, "original");
+  EXPECT_EQ(read_bytes(state_path), before);
+}
+
+TEST(MaintenanceRuntimeTest, ExactReleasePersistsTombstoneBeforeOpeningAdmission) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, active_json(29u, "ota-updater", "install"));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+
+  const auto wrong = runtime.disable(28u, "ota-updater");
+  EXPECT_FALSE(wrong.accepted);
+  EXPECT_TRUE(runtime.admissionClosed());
+  EXPECT_TRUE(runtime.snapshot().gate_active);
+
+  const auto released = runtime.disable(29u, "ota-updater");
+
+  EXPECT_TRUE(released.accepted);
+  EXPECT_FALSE(released.gate_active);
+  EXPECT_EQ(released.generation, 29u);
+  EXPECT_EQ(released.code, "OK");
+  EXPECT_FALSE(runtime.admissionClosed());
+  EXPECT_FALSE(runtime.snapshot().gate_active);
+  EXPECT_EQ(runtime.snapshot().generation, 29u);
+  EXPECT_EQ(runtime.snapshot().last_generation, 29u);
+  EXPECT_TRUE(runtime.snapshot().requester.empty());
+  EXPECT_TRUE(runtime.snapshot().reason.empty());
+  EXPECT_NE(
+      read_bytes(state_path).find("\"state\":\"inactive\""),
+      std::string::npos);
+}
+
+TEST(MaintenanceRuntimeTest, GenerationExhaustionDoesNotCloseHealthyInactiveState) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  const auto maximum = std::numeric_limits<std::uint64_t>::max();
+  write_bytes(state_path, inactive_json(maximum));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+
+  const auto result = runtime.enable("ota-updater", "install", true);
+
+  EXPECT_FALSE(result.accepted);
+  EXPECT_EQ(result.code, "GENERATION_EXHAUSTED");
+  EXPECT_FALSE(runtime.storeFault());
+  EXPECT_FALSE(runtime.admissionClosed());
+  EXPECT_FALSE(runtime.snapshot().gate_active);
+  EXPECT_EQ(runtime.snapshot().generation, maximum);
+}
+
+TEST(MaintenanceRuntimeTest, InvalidCallerInputDoesNotLatchStoreFault) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, inactive_json(17u));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+  const std::string long_reason(
+      MaintenanceStore::kMaximumReasonBytes + 1u, 'x');
+
+  const auto empty_owner = runtime.enable("", "install", true);
+  EXPECT_FALSE(empty_owner.accepted);
+  EXPECT_EQ(empty_owner.code, "INVALID");
+  EXPECT_FALSE(runtime.storeFault());
+  EXPECT_FALSE(runtime.admissionClosed());
+
+  const auto oversized =
+      runtime.enable("updater", long_reason, true);
+  EXPECT_FALSE(oversized.accepted);
+  EXPECT_EQ(oversized.code, "INVALID");
+  EXPECT_FALSE(runtime.storeFault());
+  EXPECT_FALSE(runtime.admissionClosed());
+
+  ASSERT_TRUE(runtime.enable("updater", "install", true).accepted);
+  const auto empty_release = runtime.disable(18u, "");
+  EXPECT_FALSE(empty_release.accepted);
+  EXPECT_EQ(empty_release.code, "INVALID");
+  EXPECT_FALSE(runtime.storeFault());
+  EXPECT_TRUE(runtime.admissionClosed());
+  EXPECT_TRUE(runtime.snapshot().gate_active);
+}
+
+FinalCommandEvidence maintenance_brake(
+    const std::uint64_t generation,
+    const std::uint64_t command_id) {
+  FinalCommandEvidence command;
+  command.generation = generation;
+  command.request_id = generation;
+  command.command_id = command_id;
+  command.source = "maintenance_gate";
+  command.active = true;
+  command.brake = true;
+  return command;
+}
+
+CommandStatusEvidence acknowledged_brake(
+    const std::uint64_t generation,
+    const std::uint64_t command_id) {
+  CommandStatusEvidence status;
+  status.generation = generation;
+  status.request_id = generation;
+  status.command_id = command_id;
+  status.source = "maintenance_gate";
+  status.state = 2u;
+  return status;
+}
+
+cleanbot::common::PublisherIdentity publisher(const std::uint8_t tag) {
+  cleanbot::common::PublisherIdentity identity;
+  identity.implementation_identifier = "rmw_fastrtps_cpp";
+  identity.gid = {tag, 0x55u};
+  return identity;
+}
+
+MaintenanceHardwareSample stopped_hardware(
+    const std::uint64_t frame_sequence) {
+  MaintenanceHardwareSample sample;
+  sample.frame_sequence = frame_sequence;
+  sample.connected = true;
+  return sample;
+}
+
+TEST(MaintenanceRuntimeTest, EvidenceRequiresTwoFramesAndStaleRefreshRevokesReady) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, inactive_json(17u));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+  ASSERT_TRUE(runtime.enable("updater", "install", true).accepted);
+  runtime.observeFinalCommand(maintenance_brake(18u, 900u));
+  runtime.observeCommandStatus(acknowledged_brake(18u, 900u));
+  ASSERT_TRUE(runtime.snapshot().brake_acknowledged);
+
+  const auto first =
+      runtime.observeHardware(publisher(1u), stopped_hardware(10u), 100u);
+  EXPECT_EQ(first.status, MaintenanceHardwareStatus::kAccepted);
+  EXPECT_EQ(first.publisher_epoch, 1u);
+  EXPECT_TRUE(first.session_changed);
+  EXPECT_FALSE(runtime.snapshot().ready);
+
+  runtime.refreshHardware(150u, 100u);
+  EXPECT_FALSE(runtime.snapshot().ready);
+  const auto second =
+      runtime.observeHardware(publisher(1u), stopped_hardware(11u), 160u);
+  EXPECT_EQ(second.status, MaintenanceHardwareStatus::kAccepted);
+  EXPECT_FALSE(second.session_changed);
+  ASSERT_TRUE(runtime.snapshot().ready);
+
+  runtime.refreshHardware(261u, 100u);
+  EXPECT_FALSE(runtime.snapshot().ready);
+  EXPECT_EQ(runtime.snapshot().blocker_code, "HARDWARE_NOT_FRESH");
+}
+
+TEST(
+    MaintenanceRuntimeTest,
+    PublisherSwitchNeedsNewFramesAndRetiredPublisherIsIgnored) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, inactive_json(3u));
+  MaintenanceRuntime runtime(state_path);
+  ASSERT_TRUE(runtime.initialize(true));
+  ASSERT_TRUE(runtime.enable("updater", "install", true).accepted);
+  runtime.observeFinalCommand(maintenance_brake(4u, 44u));
+  runtime.observeCommandStatus(acknowledged_brake(4u, 44u));
+  ASSERT_EQ(
+      runtime.observeHardware(
+          publisher(1u), stopped_hardware(1u), 10u).status,
+      MaintenanceHardwareStatus::kAccepted);
+  runtime.observeHardware(publisher(1u), stopped_hardware(2u), 20u);
+  ASSERT_TRUE(runtime.snapshot().ready);
+
+  const auto switched =
+      runtime.observeHardware(publisher(2u), stopped_hardware(1u), 30u);
+  EXPECT_EQ(switched.status, MaintenanceHardwareStatus::kAccepted);
+  EXPECT_TRUE(switched.session_changed);
+  EXPECT_FALSE(runtime.snapshot().ready);
+
+  MaintenanceHardwareSample moving = stopped_hardware(999u);
+  moving.x_speed = 50;
+  const auto retired =
+      runtime.observeHardware(publisher(1u), moving, 40u);
+  EXPECT_EQ(retired.status, MaintenanceHardwareStatus::kRetired);
+  EXPECT_FALSE(runtime.snapshot().ready);
+
+  runtime.observeHardware(publisher(2u), stopped_hardware(2u), 50u);
+  EXPECT_TRUE(runtime.snapshot().ready);
+}
+
+TEST(MaintenanceRuntimeTest, InvalidOrExhaustedPublisherRevokesReadiness) {
+  TemporaryDirectory temporary;
+  const auto state_path = temporary.path() / "maintenance.json";
+  write_bytes(state_path, inactive_json(7u));
+  MaintenanceRuntime runtime(state_path, 4u, 1u);
+  ASSERT_TRUE(runtime.initialize(true));
+  ASSERT_TRUE(runtime.enable("updater", "install", true).accepted);
+  runtime.observeFinalCommand(maintenance_brake(8u, 80u));
+  runtime.observeCommandStatus(acknowledged_brake(8u, 80u));
+  runtime.observeHardware(publisher(1u), stopped_hardware(1u), 10u);
+  runtime.observeHardware(publisher(1u), stopped_hardware(2u), 20u);
+  ASSERT_TRUE(runtime.snapshot().ready);
+
+  auto invalid = publisher(0u);
+  invalid.gid = {0u, 0u};
+  const auto invalid_result =
+      runtime.observeHardware(invalid, stopped_hardware(3u), 30u);
+  EXPECT_EQ(invalid_result.status, MaintenanceHardwareStatus::kRevoked);
+  EXPECT_FALSE(runtime.snapshot().ready);
+
+  runtime.observeHardware(publisher(1u), stopped_hardware(3u), 40u);
+  runtime.observeHardware(publisher(1u), stopped_hardware(4u), 50u);
+  ASSERT_TRUE(runtime.snapshot().ready);
+  const auto exhausted =
+      runtime.observeHardware(publisher(2u), stopped_hardware(1u), 60u);
+  EXPECT_EQ(exhausted.status, MaintenanceHardwareStatus::kRevoked);
+  EXPECT_FALSE(runtime.snapshot().ready);
 }
 
 }  // namespace

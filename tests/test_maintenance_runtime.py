@@ -7,6 +7,7 @@ from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 PACKAGE = WORKSPACE / "src" / "cleanbot_mission"
+COMMON_PACKAGE = WORKSPACE / "src" / "cleanbot_common"
 HEADER = PACKAGE / "include" / "cleanbot_mission" / "maintenance_runtime.hpp"
 SOURCE = PACKAGE / "src" / "maintenance_runtime.cpp"
 GATE_SOURCE = PACKAGE / "src" / "maintenance_gate.cpp"
@@ -53,11 +54,13 @@ class MaintenanceRuntimeWindowsTest(unittest.TestCase):
         cls._executable = build_dir / "maintenance_runtime_test.exe"
         vcvars = Path(installation) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
         include = PACKAGE / "include"
+        common_include = COMMON_PACKAGE / "include"
         compile_command = (
             "@echo off\n"
             f'call "{vcvars}" >nul && '
             f'cl /nologo /std:c++17 /EHsc /W4 '
             f'/I"{include}" '
+            f'/I"{common_include}" '
             f'"{HARNESS}" "{GATE_SOURCE}" "{SOURCE}" '
             f'/Fe:"{cls._executable}"\n'
         )
@@ -67,13 +70,12 @@ class MaintenanceRuntimeWindowsTest(unittest.TestCase):
             ["cmd.exe", "/d", "/c", str(compile_script)],
             cwd=build_dir,
             capture_output=True,
-            text=True,
         )
         if compiled.returncode != 0:
             raise AssertionError(
                 "maintenance runtime harness failed to compile\n"
-                + compiled.stdout
-                + compiled.stderr
+                + compiled.stdout.decode("utf-8", errors="replace")
+                + compiled.stderr.decode("utf-8", errors="replace")
             )
 
     @classmethod
@@ -126,6 +128,30 @@ class MaintenanceRuntimeWindowsTest(unittest.TestCase):
 
     def test_gate_restore_failure_latches_store_fault(self):
         self.assert_case("restore_failure")
+
+    def test_enable_and_exact_release_transition(self):
+        self.assert_case("transition")
+
+    def test_same_owner_is_idempotent_and_other_owner_is_rejected(self):
+        self.assert_case("idempotent")
+
+    def test_generation_exhaustion_keeps_healthy_inactive_admission_open(self):
+        self.assert_case("exhausted")
+
+    def test_uncertain_committed_activation_latches_fault_and_clamps(self):
+        self.assert_case("uncertain_activate")
+
+    def test_uncertain_committed_release_never_opens_admission(self):
+        self.assert_case("uncertain_release")
+
+    def test_invalid_caller_input_does_not_latch_store_fault(self):
+        self.assert_case("validation")
+
+    def test_correlated_evidence_and_hardware_freshness(self):
+        self.assert_case("evidence")
+
+    def test_publisher_switch_retirement_and_invalid_revocation(self):
+        self.assert_case("publisher")
 
 
 if __name__ == "__main__":
