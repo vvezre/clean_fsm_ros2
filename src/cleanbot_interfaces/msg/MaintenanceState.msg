@@ -1,0 +1,14 @@
+builtin_interfaces/Time stamp
+uint64 generation
+bool gate_active
+bool mission_idle
+bool command_gate_applied
+bool brake_acknowledged
+bool hardware_fresh
+bool linear_speed_zero
+bool angular_speed_zero
+bool brush_off
+bool ready
+string phase
+string blocker_code
+string message

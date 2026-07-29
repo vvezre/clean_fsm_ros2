@@ -1,0 +1,11 @@
+bool enable
+uint64 generation
+string requester
+string reason
+---
+bool accepted
+bool gate_active
+bool ready
+uint64 generation
+string code
+string message
