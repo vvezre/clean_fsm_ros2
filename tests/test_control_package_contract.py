@@ -112,6 +112,38 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn("left.request_id == right.request_id", source)
         self.assertIn("message.command_id = next_output_command_id_++", source)
 
+    def test_arbiter_subscribes_to_latched_maintenance_state_and_caches_it(self):
+        source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            '#include "cleanbot_interfaces/msg/maintenance_state.hpp"', source
+        )
+        self.assertIn('"/system/maintenance_state"', source)
+        self.assertIn("common::latched_status_qos()", source)
+        self.assertIn("onMaintenanceState", source)
+        self.assertIn("cached_maintenance_state_", source)
+        self.assertIn("has_cached_maintenance_state_", source)
+        self.assertIn("cacheMaintenanceState", source)
+
+    def test_arbiter_applies_cached_maintenance_before_first_configured_output(self):
+        source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(
+            encoding="utf-8"
+        )
+        apply_cache = source.index("applyCachedMaintenanceState();")
+        mark_configured = source.index("configured_ = true;", apply_cache)
+        publish = source.index("publishIfChanged();", mark_configured)
+
+        self.assertLess(apply_cache, mark_configured)
+        self.assertLess(mark_configured, publish)
+        self.assertIn(
+            "arbiter_->set_maintenance(\n"
+            "        cached_maintenance_state_.gate_active,\n"
+            "        cached_maintenance_state_.generation)",
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

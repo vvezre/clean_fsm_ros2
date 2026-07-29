@@ -12,13 +12,7 @@ bool CommandArbiterCore::update(
     const CommandSource source,
     const ControlCommand& command,
     const std::uint64_t now_ms) {
-  CommandSlot& destination = slot(source);
-  if (!command.active) {
-    destination.present = false;
-    return true;
-  }
-
-  if (source == CommandSource::kEmergency && command.brake) {
+  if (source == CommandSource::kEmergency && command.active && command.brake) {
     stop_boundary_command_id_ = std::max(stop_boundary_command_id_, command.command_id);
     stop_boundary_stamp_ms_ = std::max(stop_boundary_stamp_ms_, command.stamp_ms);
     software_stopped_ = true;
@@ -26,6 +20,16 @@ bool CommandArbiterCore::update(
     brush_speed_ = 0;
     has_operator_mode_ = false;
     clearAllSlots();
+    return true;
+  }
+
+  if (maintenance_active_) {
+    return false;
+  }
+
+  CommandSlot& destination = slot(source);
+  if (!command.active) {
+    destination.present = false;
     return true;
   }
 
@@ -57,6 +61,9 @@ bool CommandArbiterCore::update(
 
 void CommandArbiterCore::set_brush(
     const bool enabled, const std::int32_t speed, const bool operator_intent) {
+  if (maintenance_active_) {
+    return;
+  }
   if (!operator_intent && software_stopped_) {
     return;
   }
@@ -64,7 +71,46 @@ void CommandArbiterCore::set_brush(
   brush_speed_ = enabled ? std::max(-100, std::min(100, speed)) : 0;
 }
 
+bool CommandArbiterCore::set_maintenance(
+    const bool active, const std::uint64_t generation) {
+  if (generation == 0u) {
+    return false;
+  }
+
+  if (active) {
+    if (maintenance_active_ && generation == maintenance_generation_) {
+      return true;
+    }
+    if (generation <= maintenance_generation_) {
+      return false;
+    }
+    maintenance_active_ = true;
+    maintenance_generation_ = generation;
+    clearMaintenanceInputs();
+    return true;
+  }
+
+  if (!maintenance_active_ || generation != maintenance_generation_) {
+    return false;
+  }
+  maintenance_active_ = false;
+  clearMaintenanceInputs();
+  return true;
+}
+
+bool CommandArbiterCore::maintenance_active() const {
+  return maintenance_active_;
+}
+
+std::uint64_t CommandArbiterCore::maintenance_generation() const {
+  return maintenance_generation_;
+}
+
 ControlCommand CommandArbiterCore::output(const std::uint64_t now_ms) {
+  if (maintenance_active_) {
+    return maintenanceOutput(maintenance_generation_);
+  }
+
   if (software_stopped_) {
     return brakingOutput("software_emergency_stop");
   }
@@ -151,6 +197,13 @@ void CommandArbiterCore::clearAllSlots() {
   clearOperatorSlots();
 }
 
+void CommandArbiterCore::clearMaintenanceInputs() {
+  clearAllSlots();
+  has_operator_mode_ = false;
+  brush_enabled_ = false;
+  brush_speed_ = 0;
+}
+
 bool CommandArbiterCore::isNewerThanStop(const ControlCommand& command) const {
   if (stop_boundary_stamp_ms_ != 0u && command.stamp_ms != 0u) {
     return command.stamp_ms > stop_boundary_stamp_ms_;
@@ -162,6 +215,17 @@ ControlCommand CommandArbiterCore::brakingOutput(const std::string& source) {
   ControlCommand result;
   result.source = source;
   result.priority = source == "software_emergency_stop" ? 100u : 0u;
+  result.active = true;
+  result.brake = true;
+  return result;
+}
+
+ControlCommand CommandArbiterCore::maintenanceOutput(
+    const std::uint64_t generation) {
+  ControlCommand result;
+  result.request_id = generation;
+  result.source = "maintenance_gate";
+  result.priority = 80u;
   result.active = true;
   result.brake = true;
   return result;

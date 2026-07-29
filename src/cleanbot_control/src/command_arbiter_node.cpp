@@ -22,6 +22,7 @@
 #include "cleanbot_config/config_client.hpp"
 #include "cleanbot_control/command_arbiter_core.hpp"
 #include "cleanbot_interfaces/msg/brush_command.hpp"
+#include "cleanbot_interfaces/msg/maintenance_state.hpp"
 #include "cleanbot_interfaces/msg/vehicle_command.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -34,6 +35,15 @@ class CommandArbiterNode : public rclcpp::Node {
     // 1. /control/final_cmd是唯一最终出口，下位机节点只订阅该主题。
     final_publisher_ = create_publisher<cleanbot_interfaces::msg::VehicleCommand>(
         "/control/final_cmd", common::latest_command_qos());
+
+    maintenance_subscription_ = create_subscription<
+        cleanbot_interfaces::msg::MaintenanceState>(
+        "/system/maintenance_state",
+        common::latched_status_qos(),
+        std::bind(
+            &CommandArbiterNode::onMaintenanceState,
+            this,
+            std::placeholders::_1));
 
     // 2. 分别订阅五类车辆命令。来源类型由订阅主题确定，不相信消息自带的priority。
     emergency_subscription_ = subscribe(
@@ -75,6 +85,7 @@ class CommandArbiterNode : public rclcpp::Node {
 
  private:
   using VehicleCommand = cleanbot_interfaces::msg::VehicleCommand;
+  using MaintenanceState = cleanbot_interfaces::msg::MaintenanceState;
 
   // 创建指定来源的订阅器，并把所有车辆命令统一转交onCommand处理。
   rclcpp::Subscription<VehicleCommand>::SharedPtr subscribe(
@@ -108,6 +119,41 @@ class CommandArbiterNode : public rclcpp::Node {
     }
     arbiter_->set_brush(message->enabled, message->speed, message->operator_intent);
     publishIfChanged();
+  }
+
+  void onMaintenanceState(const MaintenanceState::SharedPtr message) {
+    if (!cacheMaintenanceState(*message)) {
+      return;
+    }
+    if (configured_ && arbiter_) {
+      // An inactive state must carry the exact generation that activated the gate.
+      arbiter_->set_maintenance(message->gate_active, message->generation);
+      publishIfChanged();
+    }
+  }
+
+  bool cacheMaintenanceState(const MaintenanceState& state) {
+    if (has_cached_maintenance_state_) {
+      if (state.generation < cached_maintenance_state_.generation) {
+        return false;
+      }
+      if (state.generation == cached_maintenance_state_.generation &&
+          !cached_maintenance_state_.gate_active && state.gate_active) {
+        return false;
+      }
+    }
+    cached_maintenance_state_ = state;
+    has_cached_maintenance_state_ = true;
+    return true;
+  }
+
+  void applyCachedMaintenanceState() {
+    if (!arbiter_ || !has_cached_maintenance_state_) {
+      return;
+    }
+    arbiter_->set_maintenance(
+        cached_maintenance_state_.gate_active,
+        cached_maintenance_state_.generation);
   }
 
   // 计算当前仲裁结果；只有输出内容变化时才发布，避免无意义地重复占用下位机串口。
@@ -148,6 +194,7 @@ class CommandArbiterNode : public rclcpp::Node {
     parameters.vision_lease_ms = static_cast<std::uint64_t>(
         snapshot.get_integer("control.vision_command_lease_ms"));
     arbiter_ = std::make_unique<CommandArbiterCore>(parameters);
+    applyCachedMaintenanceState();
     configured_ = true;
     has_last_output_ = false;
     publishIfChanged();
@@ -248,11 +295,14 @@ class CommandArbiterNode : public rclcpp::Node {
 
   std::unique_ptr<CommandArbiterCore> arbiter_;
   std::unique_ptr<config::ConfigClient> config_client_;
+  MaintenanceState cached_maintenance_state_;
+  bool has_cached_maintenance_state_{false};
   bool configured_{false};
   ControlCommand last_output_;
   bool has_last_output_{false};
   std::uint64_t next_output_command_id_{1u};
   rclcpp::Publisher<VehicleCommand>::SharedPtr final_publisher_;
+  rclcpp::Subscription<MaintenanceState>::SharedPtr maintenance_subscription_;
   rclcpp::Subscription<VehicleCommand>::SharedPtr emergency_subscription_;
   rclcpp::Subscription<VehicleCommand>::SharedPtr safety_subscription_;
   rclcpp::Subscription<VehicleCommand>::SharedPtr manual_subscription_;

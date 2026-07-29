@@ -193,6 +193,94 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertFalse(arbiter.software_stopped())
         self.assertEqual(arbiter.output(1200).source, "fresh-task")
 
+    def assert_maintenance_output(self, output, generation):
+        self.assertEqual(output.request_id, generation)
+        self.assertEqual(output.source, "maintenance_gate")
+        self.assertEqual(output.priority, 80)
+        self.assertTrue(output.active)
+        self.assertFalse(output.operator_intent)
+        self.assertEqual(output.status, 0)
+        self.assertEqual(output.x_speed, 0)
+        self.assertEqual(output.z_speed, 0)
+        self.assertEqual(output.steering_offset, 0)
+        self.assertEqual(output.brush_speed, 0)
+        self.assertEqual(output.target_distance, 0)
+        self.assertEqual(output.target_rotation, 0)
+        self.assertEqual(output.heading_deg, 0.0)
+        self.assertTrue(output.brake)
+        self.assertFalse(output.charge)
+
+    def test_maintenance_clears_existing_and_rejects_new_motion_and_brush(self):
+        arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
+        source = cppyy.gbl.cleanbot.control.CommandSource
+        arbiter.update(source.kMission, self.command("mission", 1, 200), 0)
+        arbiter.update(source.kSafety, self.command("safety", 2, 100), 1)
+        arbiter.set_brush(True, 70, True)
+
+        self.assertTrue(arbiter.set_maintenance(True, 21))
+        self.assertFalse(
+            arbiter.update(
+                source.kManual,
+                self.command("manual-during-maintenance", 3, 300, True),
+                2,
+            )
+        )
+        arbiter.set_brush(True, 90, True)
+        self.assert_maintenance_output(arbiter.output(3), 21)
+
+        self.assertTrue(arbiter.set_maintenance(False, 21))
+        released = arbiter.output(4)
+        self.assertEqual(released.source, "idle_brake")
+        self.assertTrue(released.brake)
+        self.assertEqual(released.brush_speed, 0)
+
+    def test_emergency_during_maintenance_remains_latched_after_release(self):
+        arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
+        source = cppyy.gbl.cleanbot.control.CommandSource
+        self.assertTrue(arbiter.set_maintenance(True, 22))
+
+        emergency = self.command("emergency", 100, 0, True, True, 1000)
+        self.assertTrue(arbiter.update(source.kEmergency, emergency, 1))
+        self.assertTrue(arbiter.software_stopped())
+        self.assert_maintenance_output(arbiter.output(2), 22)
+
+        self.assertTrue(arbiter.set_maintenance(False, 22))
+        self.assertEqual(arbiter.output(3).source, "software_emergency_stop")
+
+    def test_maintenance_generation_is_correlated_and_monotonic(self):
+        arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
+        self.assertFalse(arbiter.set_maintenance(True, 0))
+        self.assertTrue(arbiter.set_maintenance(True, 30))
+        self.assertTrue(arbiter.set_maintenance(True, 30))
+        self.assertFalse(arbiter.set_maintenance(False, 29))
+        self.assertTrue(arbiter.set_maintenance(True, 31))
+        self.assert_maintenance_output(arbiter.output(0), 31)
+        self.assertTrue(arbiter.set_maintenance(False, 31))
+        self.assertEqual(arbiter.maintenance_generation(), 31)
+        self.assertFalse(arbiter.set_maintenance(False, 31))
+        self.assertFalse(arbiter.set_maintenance(True, 30))
+        self.assertFalse(arbiter.set_maintenance(True, 31))
+        self.assertTrue(arbiter.set_maintenance(True, 32))
+
+        maximum = (1 << 64) - 1
+        max_arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
+        self.assertTrue(max_arbiter.set_maintenance(True, maximum))
+        self.assertTrue(max_arbiter.set_maintenance(False, maximum))
+        self.assertFalse(max_arbiter.set_maintenance(True, maximum))
+
+    def test_existing_software_stop_survives_maintenance(self):
+        arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
+        source = cppyy.gbl.cleanbot.control.CommandSource
+        emergency = self.command("emergency", 100, 0, True, True, 1000)
+        self.assertTrue(arbiter.update(source.kEmergency, emergency, 1))
+
+        self.assertTrue(arbiter.set_maintenance(True, 40))
+        self.assert_maintenance_output(arbiter.output(2), 40)
+        self.assertTrue(arbiter.set_maintenance(False, 40))
+
+        self.assertTrue(arbiter.software_stopped())
+        self.assertEqual(arbiter.output(3).source, "software_emergency_stop")
+
 
 class JoystickMapperRuntimeTest(unittest.TestCase):
     def test_full_scale_axes_and_dead_zone(self):

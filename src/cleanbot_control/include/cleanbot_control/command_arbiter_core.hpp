@@ -53,6 +53,9 @@ class CommandArbiterCore {
 
   bool update(CommandSource source, const ControlCommand& command, std::uint64_t now_ms);
   void set_brush(bool enabled, std::int32_t speed, bool operator_intent);
+  bool set_maintenance(bool active, std::uint64_t generation);
+  bool maintenance_active() const;
+  std::uint64_t maintenance_generation() const;
   ControlCommand output(std::uint64_t now_ms);
   bool software_stopped() const;
 
@@ -62,8 +65,10 @@ class CommandArbiterCore {
       const CommandSlot& slot, std::uint64_t lease_ms, std::uint64_t now_ms) const;
   void clearOperatorSlots();
   void clearAllSlots();
+  void clearMaintenanceInputs();
   bool isNewerThanStop(const ControlCommand& command) const;
   static ControlCommand brakingOutput(const std::string& source);
+  static ControlCommand maintenanceOutput(std::uint64_t generation);
 
   ArbiterParameters parameters_;
   CommandSlot emergency_;
@@ -78,6 +83,8 @@ class CommandArbiterCore {
   bool has_operator_mode_{false};
   bool brush_enabled_{false};
   std::int32_t brush_speed_{0};
+  bool maintenance_active_{false};
+  std::uint64_t maintenance_generation_{0u};
 };
 
 }  // namespace control
