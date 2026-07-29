@@ -1,3 +1,7 @@
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
 #include "cleanbot_mission/maintenance_store.hpp"
 
 #include <algorithm>
@@ -11,7 +15,9 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -32,6 +38,16 @@ namespace {
 using Json = nlohmann::json;
 
 constexpr std::uint32_t kSchemaVersion = 1u;
+
+static_assert(
+    std::is_nothrow_move_constructible<MaintenanceStoreResult>::value);
+static_assert(
+    std::is_nothrow_move_assignable<MaintenanceStoreResult>::value);
+static_assert(
+    std::is_nothrow_destructible<MaintenanceStoreResult>::value);
+static_assert(noexcept(
+    std::declval<std::string&>().swap(
+        std::declval<std::string&>())));
 
 MaintenanceStoreResult make_result(
     const MaintenanceStoreCode code,
@@ -188,49 +204,144 @@ std::string windows_error(
   return prefix + " (Windows error " + std::to_string(error) + ")";
 }
 
+constexpr DWORD kDirectoryShareMode =
+    FILE_SHARE_READ | FILE_SHARE_WRITE;
+
+struct WindowsFileIdentity {
+  DWORD volume_serial_number{0u};
+  DWORD file_index_high{0u};
+  DWORD file_index_low{0u};
+};
+
+struct DirectoryAnchor {
+  HANDLE handle{INVALID_HANDLE_VALUE};
+  WindowsFileIdentity identity;
+};
+
+bool same_identity(
+    const WindowsFileIdentity& lhs,
+    const WindowsFileIdentity& rhs) noexcept {
+  return lhs.volume_serial_number == rhs.volume_serial_number &&
+      lhs.file_index_high == rhs.file_index_high &&
+      lhs.file_index_low == rhs.file_index_low;
+}
+
+bool inspect_directory(
+    const HANDLE handle,
+    WindowsFileIdentity* identity) noexcept {
+  BY_HANDLE_FILE_INFORMATION information {};
+  if (!::GetFileInformationByHandle(handle, &information) ||
+      (information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0u ||
+      (information.dwFileAttributes &
+          FILE_ATTRIBUTE_REPARSE_POINT) != 0u) {
+    return false;
+  }
+  identity->volume_serial_number =
+      information.dwVolumeSerialNumber;
+  identity->file_index_high = information.nFileIndexHigh;
+  identity->file_index_low = information.nFileIndexLow;
+  return true;
+}
+
+bool ascii_drive_letter(const wchar_t value) noexcept {
+  return (value >= L'A' && value <= L'Z') ||
+      (value >= L'a' && value <= L'z');
+}
+
+bool reserved_windows_component(const std::wstring& component) {
+  const auto separator = component.find(L'.');
+  std::wstring stem = component.substr(0u, separator);
+  std::transform(
+      stem.begin(),
+      stem.end(),
+      stem.begin(),
+      [](const wchar_t value) {
+        return value >= L'a' && value <= L'z'
+               ? static_cast<wchar_t>(value - L'a' + L'A')
+               : value;
+      });
+  if (stem == L"CON" || stem == L"PRN" ||
+      stem == L"AUX" || stem == L"NUL" ||
+      stem == L"CLOCK$") {
+    return true;
+  }
+  if (stem.size() == 4u &&
+      (stem.compare(0u, 3u, L"COM") == 0 ||
+       stem.compare(0u, 3u, L"LPT") == 0) &&
+      stem[3] >= L'1' && stem[3] <= L'9') {
+    return true;
+  }
+  return false;
+}
+
+bool safe_windows_component(
+    const std::filesystem::path& component) {
+  const std::wstring name = component.wstring();
+  if (name.empty() || name == L"." || name == L".." ||
+      name.back() == L'.' || name.back() == L' ' ||
+      reserved_windows_component(name)) {
+    return false;
+  }
+  for (const wchar_t value : name) {
+    if (value < 32 || value == L':' || value == L'<' ||
+        value == L'>' || value == L'"' || value == L'|' ||
+        value == L'?' || value == L'*') {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool safe_local_windows_path(
+    const std::filesystem::path& path) {
+  if (!path.is_absolute() || !path.has_root_name() ||
+      !path.has_root_directory()) {
+    return false;
+  }
+  const std::wstring root_name = path.root_name().wstring();
+  if (root_name.size() != 2u ||
+      !ascii_drive_letter(root_name[0]) ||
+      root_name[1] != L':') {
+    return false;
+  }
+  for (const auto& component : path.relative_path()) {
+    if (!safe_windows_component(component)) {
+      return false;
+    }
+  }
+  return !path.filename().empty();
+}
+
 class LockedStore {
  public:
+  LockedStore() = default;
+  LockedStore(const LockedStore&) = delete;
+  LockedStore& operator=(const LockedStore&) = delete;
+  LockedStore(LockedStore&&) = delete;
+  LockedStore& operator=(LockedStore&&) = delete;
+
   ~LockedStore() {
     close_unchecked();
   }
 
   MaintenanceStoreResult open(
       const std::filesystem::path& requested_path) {
-    state_path_ = std::filesystem::absolute(requested_path);
-    if (state_path_.filename().empty()) {
+    if (!safe_local_windows_path(requested_path)) {
       return make_result(
           MaintenanceStoreCode::kInvalid,
-          "maintenance state path has no filename");
+          "unsupported Windows maintenance state path");
     }
+    state_path_ = requested_path.lexically_normal();
+    parent_path_ = state_path_.parent_path();
 
-    auto parent = state_path_.parent_path();
-    if (parent.empty()) {
-      parent = L".";
+    auto anchored = anchor_directory_chain();
+    if (anchored.code != MaintenanceStoreCode::kOk) {
+      return anchored;
     }
-    directory_handle_ = ::CreateFileW(
-        parent.c_str(),
-        GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr,
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-        nullptr);
-    if (directory_handle_ == INVALID_HANDLE_VALUE) {
-      return make_result(
-          MaintenanceStoreCode::kIoError,
-          windows_error("failed to open maintenance parent directory"));
-    }
-
-    BY_HANDLE_FILE_INFORMATION directory_information {};
-    if (!::GetFileInformationByHandle(
-            directory_handle_, &directory_information) ||
-        (directory_information.dwFileAttributes &
-            FILE_ATTRIBUTE_DIRECTORY) == 0u ||
-        (directory_information.dwFileAttributes &
-            FILE_ATTRIBUTE_REPARSE_POINT) != 0u) {
+    if (!validate_parent_anchor()) {
       return make_result(
           MaintenanceStoreCode::kInvalid,
-          "maintenance parent is not a trusted directory");
+          "Windows maintenance parent anchor changed");
     }
 
     guard_path_ =
@@ -278,7 +389,9 @@ class LockedStore {
         "maintenance guard locked");
   }
 
-  void finish(MaintenanceStoreResult* result) noexcept {
+  void finish(
+      MaintenanceStoreResult* result,
+      std::string* prepared_error_message) noexcept {
     DWORD first_error = ERROR_SUCCESS;
     if (locked_) {
       OVERLAPPED overlapped {};
@@ -295,23 +408,20 @@ class LockedStore {
       }
       guard_handle_ = INVALID_HANDLE_VALUE;
     }
-    if (directory_handle_ != INVALID_HANDLE_VALUE) {
-      if (!::CloseHandle(directory_handle_) &&
-          first_error == ERROR_SUCCESS) {
-        first_error = ::GetLastError();
+    for (auto anchor = directory_anchors_.rbegin();
+        anchor != directory_anchors_.rend();
+        ++anchor) {
+      if (anchor->handle != INVALID_HANDLE_VALUE) {
+        if (!::CloseHandle(anchor->handle) &&
+            first_error == ERROR_SUCCESS) {
+          first_error = ::GetLastError();
+        }
+        anchor->handle = INVALID_HANDLE_VALUE;
       }
-      directory_handle_ = INVALID_HANDLE_VALUE;
     }
     if (first_error != ERROR_SUCCESS) {
       result->code = MaintenanceStoreCode::kIoError;
-      try {
-        result->message =
-            windows_error(
-                "failed to close maintenance store handles",
-                first_error);
-      } catch (...) {
-        result->message.clear();
-      }
+      result->message.swap(*prepared_error_message);
     }
   }
 
@@ -319,20 +429,120 @@ class LockedStore {
     return state_path_;
   }
 
+  bool validate_parent_anchor() const noexcept {
+    if (directory_anchors_.empty()) {
+      return false;
+    }
+    const HANDLE validation_handle = ::CreateFileW(
+        parent_path_.c_str(),
+        FILE_READ_ATTRIBUTES,
+        kDirectoryShareMode,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        nullptr);
+    if (validation_handle == INVALID_HANDLE_VALUE) {
+      return false;
+    }
+    WindowsFileIdentity identity;
+    const bool inspected =
+        inspect_directory(validation_handle, &identity);
+    const bool closed = ::CloseHandle(validation_handle) != 0;
+    return inspected && closed &&
+        same_identity(
+            identity,
+            directory_anchors_.back().identity);
+  }
+
  private:
+  MaintenanceStoreResult anchor_directory_chain() {
+    std::filesystem::path anchored_path = state_path_.root_path();
+    auto anchored = anchor_directory(anchored_path);
+    if (anchored.code != MaintenanceStoreCode::kOk) {
+      return anchored;
+    }
+    for (const auto& component : parent_path_.relative_path()) {
+      anchored_path /= component;
+      anchored = anchor_directory(anchored_path);
+      if (anchored.code != MaintenanceStoreCode::kOk) {
+        return anchored;
+      }
+    }
+    return make_result(
+        MaintenanceStoreCode::kOk,
+        "Windows maintenance directory chain anchored");
+  }
+
+  MaintenanceStoreResult anchor_directory(
+      const std::filesystem::path& directory_path) {
+    const HANDLE handle = ::CreateFileW(
+        directory_path.c_str(),
+        FILE_READ_ATTRIBUTES,
+        kDirectoryShareMode,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+      return make_result(
+          MaintenanceStoreCode::kIoError,
+          windows_error(
+              "failed to anchor Windows maintenance directory"));
+    }
+    DirectoryAnchor anchor;
+    anchor.handle = handle;
+    if (!inspect_directory(handle, &anchor.identity)) {
+      ::CloseHandle(handle);
+      return make_result(
+          MaintenanceStoreCode::kInvalid,
+          "Windows maintenance directory is a reparse point");
+    }
+    try {
+      directory_anchors_.push_back(anchor);
+    } catch (...) {
+      ::CloseHandle(handle);
+      throw;
+    }
+    return make_result(
+        MaintenanceStoreCode::kOk,
+        "Windows maintenance directory anchored");
+  }
+
   void close_unchecked() noexcept {
-    MaintenanceStoreResult ignored;
-    finish(&ignored);
+    if (locked_) {
+      OVERLAPPED overlapped {};
+      ::UnlockFileEx(
+          guard_handle_, 0u, MAXDWORD, MAXDWORD, &overlapped);
+      locked_ = false;
+    }
+    if (guard_handle_ != INVALID_HANDLE_VALUE) {
+      ::CloseHandle(guard_handle_);
+      guard_handle_ = INVALID_HANDLE_VALUE;
+    }
+    for (auto anchor = directory_anchors_.rbegin();
+        anchor != directory_anchors_.rend();
+        ++anchor) {
+      if (anchor->handle != INVALID_HANDLE_VALUE) {
+        ::CloseHandle(anchor->handle);
+        anchor->handle = INVALID_HANDLE_VALUE;
+      }
+    }
   }
 
   std::filesystem::path state_path_;
+  std::filesystem::path parent_path_;
   std::filesystem::path guard_path_;
-  HANDLE directory_handle_{INVALID_HANDLE_VALUE};
+  std::vector<DirectoryAnchor> directory_anchors_;
   HANDLE guard_handle_{INVALID_HANDLE_VALUE};
   bool locked_{false};
 };
 
 MaintenanceStoreResult read_locked(const LockedStore& store) {
+  if (!store.validate_parent_anchor()) {
+    return make_result(
+        MaintenanceStoreCode::kInvalid,
+        "Windows maintenance parent anchor changed");
+  }
   HANDLE file = ::CreateFileW(
       store.state_path().c_str(),
       GENERIC_READ,
@@ -412,6 +622,16 @@ MaintenanceStoreResult write_locked(
         MaintenanceStoreCode::kInvalid,
         "serialized maintenance state is too large");
   }
+  auto committed_success = make_result(
+      MaintenanceStoreCode::kOk,
+      "maintenance state committed",
+      record,
+      true);
+  if (!store.validate_parent_anchor()) {
+    return make_result(
+        MaintenanceStoreCode::kInvalid,
+        "Windows maintenance parent anchor changed");
+  }
 
   std::filesystem::path temporary_path;
   HANDLE temporary = INVALID_HANDLE_VALUE;
@@ -449,7 +669,7 @@ MaintenanceStoreResult write_locked(
     const DWORD remaining = static_cast<DWORD>(
         std::min<std::size_t>(
             bytes.size() - offset,
-            std::numeric_limits<DWORD>::max()));
+            (std::numeric_limits<DWORD>::max)()));
     if (!::WriteFile(
             temporary,
             bytes.data() + offset,
@@ -481,6 +701,12 @@ MaintenanceStoreResult write_locked(
         MaintenanceStoreCode::kIoError,
         windows_error("failed to close maintenance temp file", error));
   }
+  if (!store.validate_parent_anchor()) {
+    ::DeleteFileW(temporary_path.c_str());
+    return make_result(
+        MaintenanceStoreCode::kInvalid,
+        "Windows maintenance parent anchor changed");
+  }
   if (!::MoveFileExW(
           temporary_path.c_str(),
           store.state_path().c_str(),
@@ -491,11 +717,8 @@ MaintenanceStoreResult write_locked(
         MaintenanceStoreCode::kIoError,
         windows_error("failed to replace maintenance state", error));
   }
-  return make_result(
-      MaintenanceStoreCode::kOk,
-      "maintenance state committed",
-      record,
-      true);
+  // Windows maintenance state commit point.
+  return std::move(committed_success);
 }
 
 #else
@@ -516,6 +739,12 @@ bool close_descriptor(const int descriptor, int* error) noexcept {
 
 class LockedStore {
  public:
+  LockedStore() = default;
+  LockedStore(const LockedStore&) = delete;
+  LockedStore& operator=(const LockedStore&) = delete;
+  LockedStore(LockedStore&&) = delete;
+  LockedStore& operator=(LockedStore&&) = delete;
+
   ~LockedStore() {
     close_unchecked();
   }
@@ -599,7 +828,9 @@ class LockedStore {
         "maintenance guard locked");
   }
 
-  void finish(MaintenanceStoreResult* result) noexcept {
+  void finish(
+      MaintenanceStoreResult* result,
+      std::string* prepared_error_message) noexcept {
     int first_error = 0;
     if (locked_) {
       while (::flock(guard_fd_, LOCK_UN) != 0) {
@@ -629,13 +860,7 @@ class LockedStore {
     }
     if (first_error != 0) {
       result->code = MaintenanceStoreCode::kIoError;
-      try {
-        result->message = posix_error(
-            "failed to close maintenance store handles",
-            first_error);
-      } catch (...) {
-        result->message.clear();
-      }
+      result->message.swap(*prepared_error_message);
     }
   }
 
@@ -649,8 +874,20 @@ class LockedStore {
 
  private:
   void close_unchecked() noexcept {
-    MaintenanceStoreResult ignored;
-    finish(&ignored);
+    if (locked_) {
+      while (::flock(guard_fd_, LOCK_UN) != 0 &&
+          errno == EINTR) {
+      }
+      locked_ = false;
+    }
+    if (guard_fd_ >= 0) {
+      ::close(guard_fd_);
+      guard_fd_ = -1;
+    }
+    if (directory_fd_ >= 0) {
+      ::close(directory_fd_);
+      directory_fd_ = -1;
+    }
   }
 
   int directory_fd_{-1};
@@ -781,6 +1018,16 @@ MaintenanceStoreResult write_locked(
         MaintenanceStoreCode::kInvalid,
         "serialized maintenance state is too large");
   }
+  auto committed_success = make_result(
+      MaintenanceStoreCode::kOk,
+      "maintenance state committed",
+      record,
+      true);
+  auto post_commit_failure = make_result(
+      MaintenanceStoreCode::kIoError,
+      "maintenance state was renamed but directory sync failed",
+      record,
+      true);
 
   std::string temporary_name;
   int temporary_fd = -1;
@@ -902,22 +1149,14 @@ MaintenanceStoreResult write_locked(
         posix_error("failed to replace maintenance state", error));
   }
 
+  // POSIX maintenance state commit point.
   while (::fsync(store.directory_fd()) != 0) {
     if (errno == EINTR) {
       continue;
     }
-    return make_result(
-        MaintenanceStoreCode::kIoError,
-        posix_error(
-            "maintenance state was renamed but directory sync failed"),
-        record,
-        true);
+    return std::move(post_commit_failure);
   }
-  return make_result(
-      MaintenanceStoreCode::kOk,
-      "maintenance state committed",
-      record,
-      true);
+  return std::move(committed_success);
 }
 
 #endif
@@ -931,9 +1170,11 @@ MaintenanceStoreResult with_locked_store(
   if (opened.code != MaintenanceStoreCode::kOk) {
     return opened;
   }
+  std::string finish_error_message =
+      "failed to close maintenance store handles";
   auto result = operation(store);
-  store.finish(&result);
-  return result;
+  store.finish(&result, &finish_error_message);
+  return std::move(result);
 }
 
 MaintenanceStoreResult exception_result(

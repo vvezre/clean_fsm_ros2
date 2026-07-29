@@ -110,6 +110,10 @@ static_assert(noexcept(
     std::declval<MaintenanceStore&>().release(
         std::uint64_t{1u},
         std::declval<const std::string&>())));
+static_assert(
+    std::is_nothrow_move_constructible<MaintenanceStoreResult>::value);
+static_assert(
+    std::is_nothrow_move_assignable<MaintenanceStoreResult>::value);
 
 TEST(MaintenanceStoreTest, MissingIsDistinctAndNeverCreatesState) {
   TemporaryDirectory temporary;

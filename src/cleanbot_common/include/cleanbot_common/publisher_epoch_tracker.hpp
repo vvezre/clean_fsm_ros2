@@ -44,6 +44,10 @@ struct PublisherEpochResult
 class PublisherEpochTracker
 {
 public:
+  static constexpr std::size_t
+    kMaximumImplementationIdentifierBytes = 256U;
+  static constexpr std::size_t kMaximumGidBytes = 256U;
+
   static constexpr std::uint64_t default_maximum_epoch() noexcept
   {
     return std::numeric_limits<std::uint64_t>::max();
@@ -96,7 +100,13 @@ public:
 private:
   static bool is_valid(const PublisherIdentity & identity)
   {
-    if (identity.implementation_identifier.empty() || identity.gid.empty()) {
+    if (
+      identity.implementation_identifier.empty() ||
+      identity.implementation_identifier.size() >
+      kMaximumImplementationIdentifierBytes ||
+      identity.gid.empty() ||
+      identity.gid.size() > kMaximumGidBytes)
+    {
       return false;
     }
 

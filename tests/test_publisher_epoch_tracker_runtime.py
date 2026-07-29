@@ -87,6 +87,43 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
             self.assertEqual(result.epoch, 0)
             self.assertFalse(result.session_changed)
 
+    def test_bounds_owned_identity_fields(self):
+        tracker = self.api.PublisherEpochTracker()
+        maximum_identifier_bytes = int(
+            self.api.PublisherEpochTracker
+            .kMaximumImplementationIdentifierBytes
+        )
+        maximum_gid_bytes = int(
+            self.api.PublisherEpochTracker.kMaximumGidBytes
+        )
+
+        maximum = tracker.observe(
+            identity(
+                "r" * maximum_identifier_bytes,
+                [0] * (maximum_gid_bytes - 1) + [1],
+            )
+        )
+        self.assertEqual(
+            maximum.status,
+            self.api.PublisherEpochStatus.kAccepted,
+        )
+        self.assertEqual(maximum.epoch, 1)
+        self.assertTrue(maximum.session_changed)
+
+        invalid_identifier = tracker.observe(
+            identity("r" * (maximum_identifier_bytes + 1), [1])
+        )
+        invalid_gid = tracker.observe(
+            identity("rmw-a", [1] * (maximum_gid_bytes + 1))
+        )
+        for result in (invalid_identifier, invalid_gid):
+            self.assertEqual(
+                result.status,
+                self.api.PublisherEpochStatus.kInvalid,
+            )
+            self.assertEqual(result.epoch, 1)
+            self.assertFalse(result.session_changed)
+
     def test_distinguishes_implementation_identifier_and_full_gid(self):
         tracker = self.api.PublisherEpochTracker()
 

@@ -44,6 +44,45 @@ TEST(PublisherEpochTracker, RejectsInvalidIdentitiesWithoutChangingSession)
   EXPECT_TRUE(first_valid.session_changed);
 }
 
+TEST(PublisherEpochTracker, BoundsOwnedIdentityFields)
+{
+  PublisherEpochTracker tracker;
+  const std::string maximum_identifier(
+    PublisherEpochTracker::kMaximumImplementationIdentifierBytes,
+    'r');
+  std::vector<std::uint8_t> maximum_gid(
+    PublisherEpochTracker::kMaximumGidBytes,
+    0U);
+  maximum_gid.back() = 1U;
+
+  PublisherIdentity maximum_identity{
+    maximum_identifier,
+    maximum_gid};
+  const auto maximum = tracker.observe(maximum_identity);
+  EXPECT_EQ(maximum.status, PublisherEpochStatus::kAccepted);
+  EXPECT_EQ(maximum.epoch, 1U);
+  EXPECT_TRUE(maximum.session_changed);
+
+  PublisherIdentity overlong_identifier{
+    maximum_identifier + "x",
+    {1U}};
+  const auto invalid_identifier =
+    tracker.observe(overlong_identifier);
+  EXPECT_EQ(invalid_identifier.status, PublisherEpochStatus::kInvalid);
+  EXPECT_EQ(invalid_identifier.epoch, 1U);
+  EXPECT_FALSE(invalid_identifier.session_changed);
+
+  auto overlong_gid = maximum_gid;
+  overlong_gid.push_back(1U);
+  PublisherIdentity overlong_gid_identity{
+    "rmw-a",
+    std::move(overlong_gid)};
+  const auto invalid_gid = tracker.observe(overlong_gid_identity);
+  EXPECT_EQ(invalid_gid.status, PublisherEpochStatus::kInvalid);
+  EXPECT_EQ(invalid_gid.epoch, 1U);
+  EXPECT_FALSE(invalid_gid.session_changed);
+}
+
 TEST(PublisherEpochTracker, KeepsTheCurrentIdentityInTheSameEpoch)
 {
   PublisherEpochTracker tracker;
