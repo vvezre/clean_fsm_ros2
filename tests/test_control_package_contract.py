@@ -124,8 +124,12 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn("common::latched_status_qos()", source)
         self.assertIn("onMaintenanceState", source)
         self.assertIn("cached_maintenance_state_", source)
-        self.assertIn("has_cached_maintenance_state_", source)
         self.assertIn("cacheMaintenanceState", source)
+        self.assertIn("MaintenanceGateCache maintenance_cache_", source)
+        self.assertIn(
+            "maintenance_cache_.update(state.gate_active, state.generation)",
+            source,
+        )
 
     def test_arbiter_applies_cached_maintenance_before_first_configured_output(self):
         source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(

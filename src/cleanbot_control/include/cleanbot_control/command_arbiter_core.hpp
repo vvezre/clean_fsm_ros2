@@ -47,6 +47,19 @@ struct CommandSlot {
   bool present{false};
 };
 
+class MaintenanceGateCache {
+ public:
+  bool update(bool active, std::uint64_t generation);
+  bool has_state() const;
+  bool active() const;
+  std::uint64_t generation() const;
+
+ private:
+  bool has_state_{false};
+  bool active_{false};
+  std::uint64_t generation_{0u};
+};
+
 class CommandArbiterCore {
  public:
   explicit CommandArbiterCore(const ArbiterParameters& parameters = ArbiterParameters());
@@ -83,8 +96,7 @@ class CommandArbiterCore {
   bool has_operator_mode_{false};
   bool brush_enabled_{false};
   std::int32_t brush_speed_{0};
-  bool maintenance_active_{false};
-  std::uint64_t maintenance_generation_{0u};
+  MaintenanceGateCache maintenance_gate_;
 };
 
 }  // namespace control

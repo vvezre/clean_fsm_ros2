@@ -133,22 +133,15 @@ class CommandArbiterNode : public rclcpp::Node {
   }
 
   bool cacheMaintenanceState(const MaintenanceState& state) {
-    if (has_cached_maintenance_state_) {
-      if (state.generation < cached_maintenance_state_.generation) {
-        return false;
-      }
-      if (state.generation == cached_maintenance_state_.generation &&
-          !cached_maintenance_state_.gate_active && state.gate_active) {
-        return false;
-      }
+    if (!maintenance_cache_.update(state.gate_active, state.generation)) {
+      return false;
     }
     cached_maintenance_state_ = state;
-    has_cached_maintenance_state_ = true;
     return true;
   }
 
   void applyCachedMaintenanceState() {
-    if (!arbiter_ || !has_cached_maintenance_state_) {
+    if (!arbiter_ || !maintenance_cache_.has_state()) {
       return;
     }
     arbiter_->set_maintenance(
@@ -295,8 +288,8 @@ class CommandArbiterNode : public rclcpp::Node {
 
   std::unique_ptr<CommandArbiterCore> arbiter_;
   std::unique_ptr<config::ConfigClient> config_client_;
+  MaintenanceGateCache maintenance_cache_;
   MaintenanceState cached_maintenance_state_;
-  bool has_cached_maintenance_state_{false};
   bool configured_{false};
   ControlCommand last_output_;
   bool has_last_output_{false};

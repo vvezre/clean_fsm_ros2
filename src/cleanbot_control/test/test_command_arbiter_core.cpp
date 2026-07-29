@@ -70,28 +70,55 @@ TEST(CommandArbiterCore, EmergencyClearsBrushAndRequiresFreshIntent) {
 TEST(CommandArbiterCore, MaintenanceClearsEverySlotAndBrushAndEmitsOnlyBrake) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_TRUE(arbiter.update(
-      cleanbot::control::CommandSource::kMission,
-      command("mission", 1u, 101), 1u));
-  EXPECT_TRUE(arbiter.update(
-      cleanbot::control::CommandSource::kManual,
-      command("manual", 2u, 102), 2u));
-  EXPECT_TRUE(arbiter.update(
-      cleanbot::control::CommandSource::kVision,
-      command("vision", 3u, 103), 3u));
+      cleanbot::control::CommandSource::kEmergency,
+      command("emergency-monitor", 1u, 101), 1u));
   EXPECT_TRUE(arbiter.update(
       cleanbot::control::CommandSource::kSafety,
-      command("safety", 4u, 104), 4u));
+      command("safety", 2u, 102), 2u));
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kMission,
+      command("mission", 3u, 103), 3u));
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kManual,
+      command("manual", 4u, 104), 4u));
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kVision,
+      command("vision", 5u, 105), 5u));
   arbiter.set_brush(true, 75, true);
 
   EXPECT_TRUE(arbiter.set_maintenance(true, 41u));
   EXPECT_TRUE(arbiter.maintenance_active());
   EXPECT_EQ(arbiter.maintenance_generation(), 41u);
-  expectMaintenanceOutput(arbiter.output(5u), 41u);
+  expectMaintenanceOutput(arbiter.output(6u), 41u);
 
   EXPECT_TRUE(arbiter.set_maintenance(false, 41u));
-  const auto released = arbiter.output(6u);
+  const auto released = arbiter.output(7u);
   EXPECT_EQ(released.source, "idle_brake");
   EXPECT_TRUE(released.brake);
+  EXPECT_EQ(released.brush_speed, 0);
+}
+
+TEST(CommandArbiterCore, NewMaintenanceGenerationClearsStateCreatedAfterRelease) {
+  cleanbot::control::CommandArbiterCore arbiter;
+  EXPECT_TRUE(arbiter.set_maintenance(true, 50u));
+  EXPECT_TRUE(arbiter.set_maintenance(false, 50u));
+
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kEmergency,
+      command("emergency-monitor", 1u, 101), 1u));
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kSafety,
+      command("safety", 2u, 102), 2u));
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kManual,
+      command("manual-operator-mode", 3u, 103, true), 3u));
+  arbiter.set_brush(true, 85, true);
+
+  EXPECT_TRUE(arbiter.set_maintenance(true, 51u));
+  expectMaintenanceOutput(arbiter.output(4u), 51u);
+  EXPECT_TRUE(arbiter.set_maintenance(false, 51u));
+  const auto released = arbiter.output(5u);
+  EXPECT_EQ(released.source, "idle_brake");
   EXPECT_EQ(released.brush_speed, 0);
 }
 
@@ -181,4 +208,41 @@ TEST(CommandArbiterCore, MaintenanceGenerationIsStrictAndCannotBeReused) {
   EXPECT_TRUE(max_arbiter.set_maintenance(false, maximum));
   EXPECT_FALSE(max_arbiter.set_maintenance(true, maximum));
   EXPECT_FALSE(max_arbiter.set_maintenance(true, maximum - 1u));
+}
+
+TEST(MaintenanceGateCache, MismatchedInactiveCannotReplaceActiveGeneration) {
+  cleanbot::control::MaintenanceGateCache cache;
+  EXPECT_TRUE(cache.update(true, 10u));
+  EXPECT_TRUE(cache.has_state());
+  EXPECT_TRUE(cache.active());
+  EXPECT_EQ(cache.generation(), 10u);
+
+  EXPECT_FALSE(cache.update(false, 11u));
+  EXPECT_TRUE(cache.active());
+  EXPECT_EQ(cache.generation(), 10u);
+  EXPECT_TRUE(cache.update(false, 10u));
+  EXPECT_FALSE(cache.active());
+  EXPECT_EQ(cache.generation(), 10u);
+}
+
+TEST(MaintenanceGateCache, ReleasedAndInvalidGenerationsCannotBeReused) {
+  cleanbot::control::MaintenanceGateCache cache;
+  EXPECT_FALSE(cache.update(true, 0u));
+  EXPECT_FALSE(cache.update(false, 0u));
+  EXPECT_FALSE(cache.update(false, 5u));
+  EXPECT_FALSE(cache.has_state());
+
+  EXPECT_TRUE(cache.update(true, 5u));
+  EXPECT_TRUE(cache.update(true, 5u));
+  EXPECT_TRUE(cache.update(false, 5u));
+  EXPECT_FALSE(cache.update(false, 5u));
+  EXPECT_FALSE(cache.update(true, 5u));
+  EXPECT_FALSE(cache.update(true, 4u));
+  EXPECT_FALSE(cache.update(false, 6u));
+  EXPECT_EQ(cache.generation(), 5u);
+  EXPECT_FALSE(cache.active());
+
+  EXPECT_TRUE(cache.update(true, 6u));
+  EXPECT_TRUE(cache.active());
+  EXPECT_EQ(cache.generation(), 6u);
 }

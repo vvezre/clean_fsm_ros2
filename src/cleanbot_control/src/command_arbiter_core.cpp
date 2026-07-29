@@ -5,6 +5,44 @@
 namespace cleanbot {
 namespace control {
 
+bool MaintenanceGateCache::update(
+    const bool active, const std::uint64_t generation) {
+  if (generation == 0u) {
+    return false;
+  }
+
+  if (active) {
+    if (has_state_ && active_ && generation == generation_) {
+      return true;
+    }
+    if (has_state_ && generation <= generation_) {
+      return false;
+    }
+    has_state_ = true;
+    active_ = true;
+    generation_ = generation;
+    return true;
+  }
+
+  if (!has_state_ || !active_ || generation != generation_) {
+    return false;
+  }
+  active_ = false;
+  return true;
+}
+
+bool MaintenanceGateCache::has_state() const {
+  return has_state_;
+}
+
+bool MaintenanceGateCache::active() const {
+  return active_;
+}
+
+std::uint64_t MaintenanceGateCache::generation() const {
+  return generation_;
+}
+
 CommandArbiterCore::CommandArbiterCore(const ArbiterParameters& parameters)
     : parameters_(parameters) {}
 
@@ -23,7 +61,7 @@ bool CommandArbiterCore::update(
     return true;
   }
 
-  if (maintenance_active_) {
+  if (maintenance_gate_.active()) {
     return false;
   }
 
@@ -61,7 +99,7 @@ bool CommandArbiterCore::update(
 
 void CommandArbiterCore::set_brush(
     const bool enabled, const std::int32_t speed, const bool operator_intent) {
-  if (maintenance_active_) {
+  if (maintenance_gate_.active()) {
     return;
   }
   if (!operator_intent && software_stopped_) {
@@ -73,42 +111,29 @@ void CommandArbiterCore::set_brush(
 
 bool CommandArbiterCore::set_maintenance(
     const bool active, const std::uint64_t generation) {
-  if (generation == 0u) {
+  const bool state_changed =
+      active != maintenance_gate_.active() ||
+      generation != maintenance_gate_.generation();
+  if (!maintenance_gate_.update(active, generation)) {
     return false;
   }
-
-  if (active) {
-    if (maintenance_active_ && generation == maintenance_generation_) {
-      return true;
-    }
-    if (generation <= maintenance_generation_) {
-      return false;
-    }
-    maintenance_active_ = true;
-    maintenance_generation_ = generation;
+  if (state_changed) {
     clearMaintenanceInputs();
-    return true;
   }
-
-  if (!maintenance_active_ || generation != maintenance_generation_) {
-    return false;
-  }
-  maintenance_active_ = false;
-  clearMaintenanceInputs();
   return true;
 }
 
 bool CommandArbiterCore::maintenance_active() const {
-  return maintenance_active_;
+  return maintenance_gate_.active();
 }
 
 std::uint64_t CommandArbiterCore::maintenance_generation() const {
-  return maintenance_generation_;
+  return maintenance_gate_.generation();
 }
 
 ControlCommand CommandArbiterCore::output(const std::uint64_t now_ms) {
-  if (maintenance_active_) {
-    return maintenanceOutput(maintenance_generation_);
+  if (maintenance_gate_.active()) {
+    return maintenanceOutput(maintenance_gate_.generation());
   }
 
   if (software_stopped_) {

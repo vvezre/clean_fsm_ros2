@@ -213,15 +213,20 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
     def test_maintenance_clears_existing_and_rejects_new_motion_and_brush(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
-        arbiter.update(source.kMission, self.command("mission", 1, 200), 0)
-        arbiter.update(source.kSafety, self.command("safety", 2, 100), 1)
+        arbiter.update(
+            source.kEmergency, self.command("emergency-monitor", 1, 250), 0
+        )
+        arbiter.update(source.kMission, self.command("mission", 2, 200), 0)
+        arbiter.update(source.kSafety, self.command("safety", 3, 100), 1)
+        arbiter.update(source.kManual, self.command("manual", 4, 150), 1)
+        arbiter.update(source.kVision, self.command("vision", 5, 125), 1)
         arbiter.set_brush(True, 70, True)
 
         self.assertTrue(arbiter.set_maintenance(True, 21))
         self.assertFalse(
             arbiter.update(
                 source.kManual,
-                self.command("manual-during-maintenance", 3, 300, True),
+                self.command("manual-during-maintenance", 6, 300, True),
                 2,
             )
         )
@@ -280,6 +285,40 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
 
         self.assertTrue(arbiter.software_stopped())
         self.assertEqual(arbiter.output(3).source, "software_emergency_stop")
+
+    def test_maintenance_cache_rejects_mismatched_release_without_mutation(self):
+        cache = cppyy.gbl.cleanbot.control.MaintenanceGateCache()
+        self.assertTrue(cache.update(True, 10))
+        self.assertTrue(cache.active())
+        self.assertEqual(cache.generation(), 10)
+
+        self.assertFalse(cache.update(False, 11))
+        self.assertTrue(cache.active())
+        self.assertEqual(cache.generation(), 10)
+        self.assertTrue(cache.update(False, 10))
+        self.assertFalse(cache.active())
+        self.assertEqual(cache.generation(), 10)
+
+    def test_maintenance_cache_rejects_zero_old_and_released_generations(self):
+        cache = cppyy.gbl.cleanbot.control.MaintenanceGateCache()
+        self.assertFalse(cache.update(True, 0))
+        self.assertFalse(cache.update(False, 0))
+        self.assertFalse(cache.update(False, 5))
+        self.assertFalse(cache.has_state())
+
+        self.assertTrue(cache.update(True, 5))
+        self.assertTrue(cache.update(True, 5))
+        self.assertTrue(cache.update(False, 5))
+        self.assertFalse(cache.update(False, 5))
+        self.assertFalse(cache.update(True, 5))
+        self.assertFalse(cache.update(True, 4))
+        self.assertFalse(cache.update(False, 6))
+        self.assertEqual(cache.generation(), 5)
+        self.assertFalse(cache.active())
+
+        self.assertTrue(cache.update(True, 6))
+        self.assertTrue(cache.active())
+        self.assertEqual(cache.generation(), 6)
 
 
 class JoystickMapperRuntimeTest(unittest.TestCase):
