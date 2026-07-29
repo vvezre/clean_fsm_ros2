@@ -1,0 +1,21 @@
+uint8 SEGMENT_UNKNOWN=0
+uint8 SEGMENT_CLEANING=1
+uint8 SEGMENT_TRANSFER=2
+uint8 SEGMENT_RETURN=3
+
+uint32 index
+string id
+uint8 segment_type
+string group_id
+string sub_area_id
+string source_lane_id
+float64 start_lat
+float64 start_lon
+float64 end_lat
+float64 end_lon
+float64 heading_deg
+float64 turn_angle_deg
+int32 speed
+uint8 mode
+float64 turn_back_length
+float64 back_length

@@ -1,0 +1,14 @@
+cleanbot_interfaces/Waypoint[] waypoints
+bool loop
+uint32 loop_count
+---
+bool success
+string code
+string message
+uint32 completed_waypoints
+---
+uint32 current_waypoint
+uint32 total_waypoints
+uint32 current_loop
+float32 progress
+string state

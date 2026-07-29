@@ -1,0 +1,6 @@
+string plan_id
+int32 brush_speed
+---
+bool accepted
+string code
+string message

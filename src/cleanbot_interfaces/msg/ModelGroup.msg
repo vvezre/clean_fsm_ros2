@@ -1,0 +1,11 @@
+string id
+string name
+uint32 area_number
+string sweep_mode
+float64 sweep_angle_deg
+string recognition_status
+string recognition_message
+float64 recognition_confidence
+cleanbot_interfaces/ModelPoint[] points
+cleanbot_interfaces/ModelSubArea[] sub_areas
+cleanbot_interfaces/ModelConnector[] connectors

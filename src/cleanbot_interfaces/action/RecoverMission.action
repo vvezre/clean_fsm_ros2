@@ -1,0 +1,11 @@
+string run_id
+---
+bool success
+string code
+string message
+---
+string state
+uint32 next_segment
+uint32 total_segments
+uint32 current_loop
+float32 progress

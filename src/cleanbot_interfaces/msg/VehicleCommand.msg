@@ -1,0 +1,24 @@
+uint8 PRIORITY_IDLE=0
+uint8 PRIORITY_VISION=20
+uint8 PRIORITY_MISSION=40
+uint8 PRIORITY_MANUAL=60
+uint8 PRIORITY_SAFETY=80
+uint8 PRIORITY_EMERGENCY=100
+
+builtin_interfaces/Time stamp
+uint64 command_id
+uint64 request_id
+string source
+uint8 priority
+bool active
+bool operator_intent
+uint8 status
+int32 x_speed
+int32 z_speed
+int32 steering_offset
+int32 brush_speed
+int32 target_distance
+int32 target_rotation
+float64 heading_deg
+bool brake
+bool charge

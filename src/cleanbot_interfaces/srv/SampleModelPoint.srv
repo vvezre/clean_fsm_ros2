@@ -1,0 +1,8 @@
+string model_id
+string group_id
+string capture_type
+---
+bool success
+string code
+string message
+cleanbot_interfaces/ModelPoint point

@@ -1,0 +1,20 @@
+uint8 STATE_UNKNOWN=0
+uint8 STATE_SENT=1
+uint8 STATE_ACKNOWLEDGED=2
+uint8 STATE_REJECTED=3
+uint8 STATE_TIMED_OUT=4
+uint8 STATE_COMPLETED=5
+uint8 STATE_QUEUED=6
+uint8 STATE_TRANSPORT_LOST=7
+uint8 STATE_SUPERSEDED=8
+
+builtin_interfaces/Time stamp
+uint64 command_id
+uint64 request_id
+string source
+uint16 sequence
+uint8 command_type
+uint8 state
+uint8 result
+uint8 completion_event
+string detail

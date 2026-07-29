@@ -1,0 +1,13 @@
+uint8 MODE_ENTER=1
+uint8 MODE_EXIT=2
+
+uint8 mode
+float64 distance
+---
+bool success
+string code
+string message
+---
+string state
+float32 progress
+float64 traveled_distance

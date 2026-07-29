@@ -1,0 +1,10 @@
+string id
+string name
+uint64 version
+string status
+float64 origin_lat
+float64 origin_lon
+bool origin_valid
+bool recognition_confirmed
+bool preview_confirmed
+cleanbot_interfaces/ModelGroup[] groups

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>cleanbot_rtk</name>
+  <version>0.1.0</version>
+  <description>RTK serial and NTRIP gateway for the cleanbot ROS2 runtime.</description>
+  <maintainer email="dev@cleanbot.local">cleanbot</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>boost</depend>
+  <depend>rclcpp</depend>
+  <depend>cleanbot_common</depend>
+  <depend>cleanbot_config</depend>
+  <depend>cleanbot_interfaces</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

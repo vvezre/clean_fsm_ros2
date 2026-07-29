@@ -1,0 +1,21 @@
+string task_id
+string model_id
+uint64 model_version
+string plan_id
+string plan_hash
+int32 brush_speed
+cleanbot_interfaces/TaskSegment[] segments
+bool loop
+uint32 loop_count
+---
+bool success
+string code
+string message
+uint32 completed_segments
+---
+uint32 current_segment
+uint32 total_segments
+uint32 current_loop
+float32 progress
+string state
+string message

@@ -1,0 +1,9 @@
+builtin_interfaces/Time stamp
+uint64 generation
+bool active
+bool finished
+bool blocked
+float64 distance_to_target_m
+float64 signed_remaining_m
+string code
+string message

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>cleanbot_config</name>
+  <version>0.1.0</version>
+  <description>Central configuration ownership and SQLite persistence for cleanbot.</description>
+  <maintainer email="engineering@cleanbot.local">Cleanbot Engineering</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>cleanbot_interfaces</depend>
+  <depend>cleanbot_common</depend>
+  <depend>sqlite3_vendor</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

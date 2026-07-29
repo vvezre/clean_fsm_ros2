@@ -1,0 +1,13 @@
+builtin_interfaces/Time stamp
+float64 raw_lat
+float64 raw_lon
+float64 filtered_lat
+float64 filtered_lon
+float64 target_heading_deg
+float64 current_heading_deg
+float64 heading_error_deg
+float64 cte_m
+float64 distance_to_target_m
+float64 signed_remaining_m
+int32 z_speed
+string control_source

@@ -1,0 +1,8 @@
+string[] keys
+bool include_sensitive
+---
+bool success
+string code
+string message
+uint64 revision
+cleanbot_interfaces/ConfigEntry[] entries

@@ -1,0 +1,5 @@
+builtin_interfaces/Time stamp
+uint64 generation
+bool active
+bool operator_intent
+cleanbot_interfaces/TaskSegment segment

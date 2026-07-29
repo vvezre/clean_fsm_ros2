@@ -1,0 +1,24 @@
+uint8 OP_CREATE=1
+uint8 OP_LOAD=2
+uint8 OP_LIST=3
+uint8 OP_DELETE=4
+uint8 OP_CREATE_GROUP=5
+uint8 OP_DELETE_GROUP=6
+uint8 OP_DELETE_POINT=7
+uint8 OP_RECOGNIZE_GROUP=8
+uint8 OP_CONFIRM_RECOGNITION=9
+uint8 OP_SAVE_VERSION=10
+
+uint8 operation
+string model_id
+string group_id
+string point_id
+string name
+string sweep_mode
+float64 sweep_angle_deg
+---
+bool success
+string code
+string message
+cleanbot_interfaces/CleaningModel model
+string[] model_ids

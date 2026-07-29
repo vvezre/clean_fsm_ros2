@@ -1,0 +1,81 @@
+/.worktrees/
+
+# ROS / colcon outputs
+/build/
+/install/
+/log/
+
+# IDE and editor state
+/.vs/
+/.vscode/
+/.idea/
+*.user
+*.suo
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Native build artifacts
+*.obj
+*.o
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+*.ilk
+*.ipch
+
+# Local scratch and generated output
+/.tmp/
+/tmp/
+/output/
+
+# Local recovery archives and source dumps
+/.recovery*.tar
+/.recovery*.tar.gz
+/*源码汇总*.txt
+
+# Machine-specific source snapshots
+/src/cleanbot_mission/src/mission_manager_node.pi-20260716.cpp
+
+# Runtime state (source files such as sqlite_* and mission_checkpoint.* remain tracked)
+*.db
+*.db-*
+*.sqlite*
+mission_checkpoint.json*
+**/bags/
+**/models/
+
+# ROS bag outputs
+rosbag2_*/
+*.db3
+*.mcap
+*.bag
+
+# Local secrets and private keys
+.env
+.env.*
+!.env.example
+!.env.sample
+*.key
+*.pem
+*.p12
+*.pfx
+!*.pub
+
+# Private continuation and resume materials
+/CONTINUE_CONTEXT.md
+/scripts/build_ros2_resume.py
+/scripts/build_ros2_resume_pdf.py
+/scripts/resume_content.py
+/docs/superpowers/
+/LEARNED/

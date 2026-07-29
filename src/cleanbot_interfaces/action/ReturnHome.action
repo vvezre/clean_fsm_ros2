@@ -1,0 +1,11 @@
+float64 target_lat
+float64 target_lon
+bool dock_after_arrival
+---
+bool success
+string code
+string message
+---
+string state
+float64 distance_remaining_m
+float32 progress

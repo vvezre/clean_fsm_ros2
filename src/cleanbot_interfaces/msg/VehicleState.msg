@@ -1,0 +1,14 @@
+builtin_interfaces/Time stamp
+string control_state
+string health_state
+string fault_state
+string current_action
+string message
+bool start_ready
+bool parking
+bool cleaning
+bool rtk_fixed
+bool in_garage
+float64 battery_percent
+uint32 current_segment
+uint32 total_segments

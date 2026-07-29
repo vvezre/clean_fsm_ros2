@@ -1,0 +1,9 @@
+string model_id
+uint64 model_version
+bool confirm_preview
+int32 speed
+---
+bool success
+string code
+string message
+cleanbot_interfaces/CleaningPlan plan

@@ -1,0 +1,8 @@
+cleanbot_interfaces/ConfigEntry[] entries
+string updated_by
+---
+bool success
+string code
+string message
+uint64 revision
+bool restart_required

@@ -1,0 +1,5 @@
+config_manager_node:
+  ros__parameters:
+    database_path: /var/lib/cleanbot/cleanbot.db
+    profile: default
+    minimum_free_space_mb: 64

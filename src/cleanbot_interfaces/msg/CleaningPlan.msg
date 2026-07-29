@@ -1,0 +1,12 @@
+string id
+string model_id
+uint64 model_version
+string plan_hash
+uint64 generated_at
+float64 brush_width_cm
+float64 minimum_overlap_cm
+float64 actual_overlap_cm
+uint32 cleaning_lane_count
+uint32 transfer_segment_count
+float64 total_length_cm
+cleanbot_interfaces/TaskSegment[] segments
