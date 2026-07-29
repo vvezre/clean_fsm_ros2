@@ -273,6 +273,60 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(max_arbiter.set_maintenance(False, maximum))
         self.assertFalse(max_arbiter.set_maintenance(True, maximum))
 
+    def test_active_generation_switch_stays_clamped_and_resets_operator_mode(self):
+        arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
+        source = cppyy.gbl.cleanbot.control.CommandSource
+        self.assertTrue(
+            arbiter.update(
+                source.kManual,
+                self.command("manual-operator-mode", 1, 150, True),
+                1,
+            )
+        )
+        arbiter.set_brush(True, 80, True)
+
+        self.assertTrue(arbiter.set_maintenance(True, 50))
+        self.assert_maintenance_output(arbiter.output(2), 50)
+        self.assertFalse(
+            arbiter.update(
+                source.kMission,
+                self.command("mission-during-generation-50", 2, 200),
+                2,
+            )
+        )
+        arbiter.set_brush(True, 90, True)
+
+        self.assertTrue(arbiter.set_maintenance(True, 51))
+        self.assertTrue(arbiter.maintenance_active())
+        self.assertEqual(arbiter.maintenance_generation(), 51)
+        self.assert_maintenance_output(arbiter.output(3), 51)
+        self.assertFalse(
+            arbiter.update(
+                source.kVision,
+                self.command("vision-during-generation-51", 3, 100),
+                3,
+            )
+        )
+        arbiter.set_brush(True, 95, True)
+        self.assert_maintenance_output(arbiter.output(4), 51)
+
+        self.assertTrue(arbiter.set_maintenance(False, 51))
+        released = arbiter.output(5)
+        self.assertEqual(released.source, "idle_brake")
+        self.assertEqual(released.brush_speed, 0)
+
+        self.assertTrue(
+            arbiter.update(
+                source.kMission,
+                self.command("mission-after-maintenance", 4, 175),
+                6,
+            )
+        )
+        resumed = arbiter.output(6)
+        self.assertEqual(resumed.source, "mission-after-maintenance")
+        self.assertEqual(resumed.x_speed, 175)
+        self.assertEqual(resumed.brush_speed, 0)
+
     def test_existing_software_stop_survives_maintenance(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource

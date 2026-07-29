@@ -98,28 +98,42 @@ TEST(CommandArbiterCore, MaintenanceClearsEverySlotAndBrushAndEmitsOnlyBrake) {
   EXPECT_EQ(released.brush_speed, 0);
 }
 
-TEST(CommandArbiterCore, NewMaintenanceGenerationClearsStateCreatedAfterRelease) {
+TEST(CommandArbiterCore, ActiveGenerationSwitchStaysClampedAndResetsOperatorMode) {
   cleanbot::control::CommandArbiterCore arbiter;
-  EXPECT_TRUE(arbiter.set_maintenance(true, 50u));
-  EXPECT_TRUE(arbiter.set_maintenance(false, 50u));
-
-  EXPECT_TRUE(arbiter.update(
-      cleanbot::control::CommandSource::kEmergency,
-      command("emergency-monitor", 1u, 101), 1u));
-  EXPECT_TRUE(arbiter.update(
-      cleanbot::control::CommandSource::kSafety,
-      command("safety", 2u, 102), 2u));
   EXPECT_TRUE(arbiter.update(
       cleanbot::control::CommandSource::kManual,
-      command("manual-operator-mode", 3u, 103, true), 3u));
+      command("manual-operator-mode", 1u, 103, true), 1u));
   arbiter.set_brush(true, 85, true);
 
+  EXPECT_TRUE(arbiter.set_maintenance(true, 50u));
+  expectMaintenanceOutput(arbiter.output(2u), 50u);
+  EXPECT_FALSE(arbiter.update(
+      cleanbot::control::CommandSource::kMission,
+      command("mission-during-generation-50", 2u, 102), 2u));
+  arbiter.set_brush(true, 90, true);
+
   EXPECT_TRUE(arbiter.set_maintenance(true, 51u));
+  EXPECT_TRUE(arbiter.maintenance_active());
+  EXPECT_EQ(arbiter.maintenance_generation(), 51u);
+  expectMaintenanceOutput(arbiter.output(3u), 51u);
+  EXPECT_FALSE(arbiter.update(
+      cleanbot::control::CommandSource::kVision,
+      command("vision-during-generation-51", 3u, 101), 3u));
+  arbiter.set_brush(true, 95, true);
   expectMaintenanceOutput(arbiter.output(4u), 51u);
+
   EXPECT_TRUE(arbiter.set_maintenance(false, 51u));
   const auto released = arbiter.output(5u);
   EXPECT_EQ(released.source, "idle_brake");
   EXPECT_EQ(released.brush_speed, 0);
+
+  EXPECT_TRUE(arbiter.update(
+      cleanbot::control::CommandSource::kMission,
+      command("mission-after-maintenance", 4u, 100), 6u));
+  const auto resumed = arbiter.output(6u);
+  EXPECT_EQ(resumed.source, "mission-after-maintenance");
+  EXPECT_EQ(resumed.x_speed, 100);
+  EXPECT_EQ(resumed.brush_speed, 0);
 }
 
 TEST(CommandArbiterCore, MaintenanceRejectsOrdinaryMotionAndBrushUntilRelease) {
