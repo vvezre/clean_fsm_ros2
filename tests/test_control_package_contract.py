@@ -125,10 +125,44 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn("onMaintenanceState", source)
         self.assertIn("cached_maintenance_state_", source)
         self.assertIn("cacheMaintenanceState", source)
-        self.assertIn("MaintenanceGateCache maintenance_cache_", source)
         self.assertIn(
-            "maintenance_cache_.update(state.gate_active, state.generation)",
+            "MaintenancePublisherCoordinator maintenance_coordinator_", source
+        )
+        self.assertIn(
+            "maintenance_coordinator_.observe(",
             source,
+        )
+
+    def test_arbiter_tracks_maintenance_publisher_gid_and_forces_one_republish(self):
+        source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(
+            encoding="utf-8"
+        )
+        cmake = (PACKAGE / "CMakeLists.txt").read_text(encoding="utf-8")
+        package_root = ET.parse(str(PACKAGE / "package.xml")).getroot()
+        dependencies = {item.text for item in package_root.findall("depend")}
+
+        self.assertIn('#include "rclcpp/message_info.hpp"', source)
+        self.assertIn('#include "rmw/types.h"', source)
+        self.assertIn("const rclcpp::MessageInfo& message_info", source)
+        self.assertIn(
+            "message_info.get_rmw_message_info().publisher_gid", source
+        )
+        self.assertIn("implementation_identifier", source)
+        self.assertIn("identity.gid.assign(", source)
+        self.assertIn("gid.data + RMW_GID_STORAGE_SIZE", source)
+        self.assertIn(
+            "observation.force_republish && observation.gate_active", source
+        )
+        self.assertIn("has_last_output_ = false;", source)
+        self.assertIn(
+            "ament_target_dependencies(control_core cleanbot_common)", cmake
+        )
+        self.assertIn("rmw", dependencies)
+        self.assertIn("find_package(rmw REQUIRED)", cmake)
+        self.assertIn(
+            "ament_target_dependencies(command_arbiter_node "
+            "rclcpp rmw cleanbot_common cleanbot_config cleanbot_interfaces)",
+            cmake,
         )
 
     def test_arbiter_applies_cached_maintenance_before_first_configured_output(self):

@@ -1,7 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "cleanbot_control/command_arbiter_core.hpp"
 
@@ -30,6 +34,14 @@ cleanbot::control::ControlCommand command(
   result.brake = brake;
   result.charge = true;
   return result;
+}
+
+cleanbot::common::PublisherIdentity publisherIdentity(
+    std::string implementation_identifier,
+    std::initializer_list<std::uint8_t> gid) {
+  return cleanbot::common::PublisherIdentity{
+      std::move(implementation_identifier),
+      std::vector<std::uint8_t>(gid)};
 }
 
 void expectMaintenanceOutput(
@@ -259,4 +271,176 @@ TEST(MaintenanceGateCache, ReleasedAndInvalidGenerationsCannotBeReused) {
   EXPECT_TRUE(cache.update(true, 6u));
   EXPECT_TRUE(cache.active());
   EXPECT_EQ(cache.generation(), 6u);
+}
+
+TEST(
+    MaintenancePublisherCoordinator,
+    PublisherRestartForcesExactlyOneReissueAndRetiresOldPublisher) {
+  cleanbot::control::MaintenancePublisherCoordinator coordinator;
+  const auto publisher_a = publisherIdentity("rmw-a", {1u, 2u, 3u});
+  const auto publisher_b = publisherIdentity("rmw-a", {4u, 5u, 6u});
+
+  const auto first = coordinator.observe(true, 10u, publisher_a);
+  EXPECT_TRUE(first.accepted);
+  EXPECT_TRUE(first.gate_active);
+  EXPECT_EQ(first.generation, 10u);
+  EXPECT_TRUE(first.session_changed);
+  EXPECT_TRUE(first.force_republish);
+
+  const auto repeated_a = coordinator.observe(true, 10u, publisher_a);
+  EXPECT_TRUE(repeated_a.accepted);
+  EXPECT_FALSE(repeated_a.session_changed);
+  EXPECT_FALSE(repeated_a.force_republish);
+
+  const auto first_b = coordinator.observe(true, 10u, publisher_b);
+  EXPECT_TRUE(first_b.accepted);
+  EXPECT_TRUE(first_b.gate_active);
+  EXPECT_EQ(first_b.generation, 10u);
+  EXPECT_TRUE(first_b.session_changed);
+  EXPECT_TRUE(first_b.force_republish);
+
+  const auto repeated_b = coordinator.observe(true, 10u, publisher_b);
+  EXPECT_TRUE(repeated_b.accepted);
+  EXPECT_FALSE(repeated_b.session_changed);
+  EXPECT_FALSE(repeated_b.force_republish);
+
+  const auto retired_a = coordinator.observe(true, 11u, publisher_a);
+  EXPECT_FALSE(retired_a.accepted);
+  EXPECT_TRUE(retired_a.gate_active);
+  EXPECT_EQ(retired_a.generation, 10u);
+  EXPECT_FALSE(retired_a.session_changed);
+  EXPECT_FALSE(retired_a.force_republish);
+}
+
+TEST(
+    MaintenancePublisherCoordinator,
+    InvalidUnknownStateDoesNotPoisonCurrentPublisherOrGate) {
+  cleanbot::control::MaintenancePublisherCoordinator coordinator;
+  const auto publisher_a = publisherIdentity("rmw-a", {1u});
+  const auto publisher_b = publisherIdentity("rmw-a", {2u});
+  const auto publisher_c = publisherIdentity("rmw-a", {3u});
+
+  ASSERT_TRUE(coordinator.observe(true, 10u, publisher_a).accepted);
+  ASSERT_TRUE(coordinator.observe(true, 10u, publisher_b).accepted);
+
+  const auto old_active = coordinator.observe(true, 9u, publisher_c);
+  EXPECT_FALSE(old_active.accepted);
+  EXPECT_TRUE(old_active.gate_active);
+  EXPECT_EQ(old_active.generation, 10u);
+
+  const auto mismatched_release =
+      coordinator.observe(false, 11u, publisher_c);
+  EXPECT_FALSE(mismatched_release.accepted);
+  EXPECT_TRUE(mismatched_release.gate_active);
+  EXPECT_EQ(mismatched_release.generation, 10u);
+
+  const auto current_b = coordinator.observe(true, 10u, publisher_b);
+  EXPECT_TRUE(current_b.accepted);
+  EXPECT_FALSE(current_b.session_changed);
+  EXPECT_FALSE(current_b.force_republish);
+
+  const auto higher_active = coordinator.observe(true, 11u, publisher_c);
+  EXPECT_TRUE(higher_active.accepted);
+  EXPECT_TRUE(higher_active.gate_active);
+  EXPECT_EQ(higher_active.generation, 11u);
+  EXPECT_TRUE(higher_active.session_changed);
+  EXPECT_TRUE(higher_active.force_republish);
+
+  const auto retired_b = coordinator.observe(true, 12u, publisher_b);
+  EXPECT_FALSE(retired_b.accepted);
+  EXPECT_EQ(retired_b.generation, 11u);
+}
+
+TEST(
+    MaintenancePublisherCoordinator,
+    NewPublisherCanCommitExactReleaseWithoutForcingReissue) {
+  cleanbot::control::MaintenancePublisherCoordinator coordinator;
+  const auto publisher_a = publisherIdentity("rmw-a", {1u});
+  const auto publisher_b = publisherIdentity("rmw-a", {2u});
+
+  ASSERT_TRUE(coordinator.observe(true, 20u, publisher_a).accepted);
+  const auto released = coordinator.observe(false, 20u, publisher_b);
+
+  EXPECT_TRUE(released.accepted);
+  EXPECT_FALSE(released.gate_active);
+  EXPECT_EQ(released.generation, 20u);
+  EXPECT_TRUE(released.session_changed);
+  EXPECT_FALSE(released.force_republish);
+  const auto repeated_release =
+      coordinator.observe(false, 20u, publisher_b);
+  EXPECT_TRUE(repeated_release.accepted);
+  EXPECT_FALSE(repeated_release.session_changed);
+  EXPECT_FALSE(repeated_release.force_republish);
+}
+
+TEST(
+    MaintenancePublisherCoordinator,
+    UntrackableIdentityOnlyEstablishesInitialActiveClamp) {
+  cleanbot::control::MaintenancePublisherCoordinator coordinator;
+  const auto invalid_publisher = publisherIdentity("rmw-a", {0u, 0u, 0u});
+  const auto publisher_a = publisherIdentity("rmw-a", {1u, 2u, 3u});
+
+  const auto initial_active =
+      coordinator.observe(true, 30u, invalid_publisher);
+  EXPECT_TRUE(initial_active.accepted);
+  EXPECT_TRUE(initial_active.gate_active);
+  EXPECT_EQ(initial_active.generation, 30u);
+  EXPECT_FALSE(initial_active.session_changed);
+  EXPECT_FALSE(initial_active.force_republish);
+
+  const auto invalid_release =
+      coordinator.observe(false, 30u, invalid_publisher);
+  EXPECT_FALSE(invalid_release.accepted);
+  EXPECT_TRUE(invalid_release.gate_active);
+  EXPECT_EQ(invalid_release.generation, 30u);
+
+  const auto first_tracked = coordinator.observe(true, 30u, publisher_a);
+  EXPECT_TRUE(first_tracked.accepted);
+  EXPECT_TRUE(first_tracked.session_changed);
+  EXPECT_TRUE(first_tracked.force_republish);
+
+  const auto invalid_higher =
+      coordinator.observe(true, 31u, invalid_publisher);
+  EXPECT_FALSE(invalid_higher.accepted);
+  EXPECT_EQ(invalid_higher.generation, 30u);
+  const auto invalid_after_current_release =
+      coordinator.observe(false, 30u, invalid_publisher);
+  EXPECT_FALSE(invalid_after_current_release.accepted);
+  EXPECT_TRUE(invalid_after_current_release.gate_active);
+
+  const auto current = coordinator.observe(true, 30u, publisher_a);
+  EXPECT_TRUE(current.accepted);
+  EXPECT_FALSE(current.session_changed);
+  EXPECT_FALSE(current.force_republish);
+
+  cleanbot::control::MaintenancePublisherCoordinator inactive_coordinator;
+  EXPECT_FALSE(
+      inactive_coordinator.observe(false, 1u, invalid_publisher).accepted);
+  EXPECT_FALSE(inactive_coordinator.has_state());
+}
+
+TEST(
+    MaintenancePublisherCoordinator,
+    TrackerCapacityExhaustionDoesNotMutateGateOrCurrentPublisher) {
+  cleanbot::control::MaintenancePublisherCoordinator coordinator(0u);
+  const auto publisher_a = publisherIdentity("rmw-a", {1u});
+  const auto publisher_b = publisherIdentity("rmw-a", {2u});
+
+  ASSERT_TRUE(coordinator.observe(true, 40u, publisher_a).accepted);
+  const auto exhausted_higher =
+      coordinator.observe(true, 41u, publisher_b);
+  EXPECT_FALSE(exhausted_higher.accepted);
+  EXPECT_TRUE(exhausted_higher.gate_active);
+  EXPECT_EQ(exhausted_higher.generation, 40u);
+
+  const auto exhausted_release =
+      coordinator.observe(false, 40u, publisher_b);
+  EXPECT_FALSE(exhausted_release.accepted);
+  EXPECT_TRUE(exhausted_release.gate_active);
+  EXPECT_EQ(exhausted_release.generation, 40u);
+
+  const auto current = coordinator.observe(true, 40u, publisher_a);
+  EXPECT_TRUE(current.accepted);
+  EXPECT_FALSE(current.session_changed);
+  EXPECT_FALSE(current.force_republish);
 }

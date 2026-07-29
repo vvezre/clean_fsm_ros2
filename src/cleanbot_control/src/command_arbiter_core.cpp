@@ -1,6 +1,7 @@
 #include "cleanbot_control/command_arbiter_core.hpp"
 
 #include <algorithm>
+#include <utility>
 
 namespace cleanbot {
 namespace control {
@@ -41,6 +42,76 @@ bool MaintenanceGateCache::active() const {
 
 std::uint64_t MaintenanceGateCache::generation() const {
   return generation_;
+}
+
+MaintenancePublisherCoordinator::MaintenancePublisherCoordinator(
+    const std::size_t maximum_retired_identities,
+    const std::uint64_t maximum_epoch)
+    : publisher_tracker_(maximum_retired_identities, maximum_epoch) {}
+
+MaintenancePublisherObservation MaintenancePublisherCoordinator::observe(
+    const bool gate_active,
+    const std::uint64_t generation,
+    const common::PublisherIdentity& publisher_identity) {
+  auto next_gate = gate_;
+  auto next_tracker = publisher_tracker_;
+  const auto publisher_result = next_tracker.observe(publisher_identity);
+
+  if (publisher_result.status == common::PublisherEpochStatus::kInvalid) {
+    if (has_tracked_publisher_ || !gate_active ||
+        !next_gate.update(true, generation)) {
+      return result(false);
+    }
+    gate_ = std::move(next_gate);
+    return result(true);
+  }
+
+  const bool repeated_current_release =
+      publisher_result.status == common::PublisherEpochStatus::kAccepted &&
+      !publisher_result.session_changed &&
+      gate_.has_state() && !gate_.active() && !gate_active &&
+      generation == gate_.generation();
+  if (repeated_current_release) {
+    return result(true);
+  }
+
+  if (publisher_result.status != common::PublisherEpochStatus::kAccepted ||
+      !next_gate.update(gate_active, generation)) {
+    return result(false);
+  }
+
+  gate_ = std::move(next_gate);
+  publisher_tracker_ = std::move(next_tracker);
+  has_tracked_publisher_ = true;
+  const bool session_changed = publisher_result.session_changed;
+  return result(
+      true,
+      session_changed,
+      session_changed && gate_.active());
+}
+
+bool MaintenancePublisherCoordinator::has_state() const {
+  return gate_.has_state();
+}
+
+bool MaintenancePublisherCoordinator::active() const {
+  return gate_.active();
+}
+
+std::uint64_t MaintenancePublisherCoordinator::generation() const {
+  return gate_.generation();
+}
+
+MaintenancePublisherObservation MaintenancePublisherCoordinator::result(
+    const bool accepted,
+    const bool session_changed,
+    const bool force_republish) const {
+  return MaintenancePublisherObservation{
+      accepted,
+      gate_.active(),
+      gate_.generation(),
+      session_changed,
+      force_republish};
 }
 
 CommandArbiterCore::CommandArbiterCore(const ArbiterParameters& parameters)

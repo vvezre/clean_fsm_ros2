@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rmw REQUIRED)
 find_package(cleanbot_common REQUIRED)
 find_package(cleanbot_config REQUIRED)
 find_package(cleanbot_interfaces REQUIRED)
@@ -21,6 +22,7 @@ target_include_directories(control_core
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+ament_target_dependencies(control_core cleanbot_common)
 
 add_executable(tracking_node src/tracking_node.cpp)
 target_link_libraries(tracking_node control_core)
@@ -28,7 +30,7 @@ ament_target_dependencies(tracking_node rclcpp cleanbot_common cleanbot_config c
 
 add_executable(command_arbiter_node src/command_arbiter_node.cpp)
 target_link_libraries(command_arbiter_node control_core)
-ament_target_dependencies(command_arbiter_node rclcpp cleanbot_common cleanbot_config cleanbot_interfaces)
+ament_target_dependencies(command_arbiter_node rclcpp rmw cleanbot_common cleanbot_config cleanbot_interfaces)
 
 install(TARGETS control_core tracking_node command_arbiter_node
   ARCHIVE DESTINATION lib
@@ -49,4 +51,5 @@ endif()
 
 ament_export_include_directories(include)
 ament_export_libraries(control_core)
+ament_export_dependencies(cleanbot_common)
 ament_package()

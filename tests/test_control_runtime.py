@@ -24,8 +24,10 @@ import cppyy
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 PACKAGE = WORKSPACE / "src" / "cleanbot_control"
+COMMON_PACKAGE = WORKSPACE / "src" / "cleanbot_common"
 cppyy.add_include_path(str(PACKAGE / "include"))
 cppyy.add_include_path(str(PACKAGE / "src"))
+cppyy.add_include_path(str(COMMON_PACKAGE / "include"))
 cppyy.cppdef(
     '#include "tracking_core.cpp"\n'
     '#include "command_arbiter_core.cpp"\n'
@@ -95,6 +97,13 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         command.x_speed = speed
         command.brake = brake
         return command
+
+    def publisher_identity(self, implementation_identifier, gid):
+        identity = cppyy.gbl.cleanbot.common.PublisherIdentity()
+        identity.implementation_identifier = implementation_identifier
+        for value in gid:
+            identity.gid.push_back(value)
+        return identity
 
     def test_manual_replaces_mission_then_expires_to_brake(self):
         params = cppyy.gbl.cleanbot.control.ArbiterParameters()
@@ -373,6 +382,143 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(cache.update(True, 6))
         self.assertTrue(cache.active())
         self.assertEqual(cache.generation(), 6)
+
+    def test_publisher_restart_forces_one_reissue_and_retires_old_session(self):
+        coordinator = (
+            cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
+        )
+        publisher_a = self.publisher_identity("rmw-a", [1, 2, 3])
+        publisher_b = self.publisher_identity("rmw-a", [4, 5, 6])
+
+        first = coordinator.observe(True, 10, publisher_a)
+        self.assertTrue(first.accepted)
+        self.assertTrue(first.gate_active)
+        self.assertEqual(first.generation, 10)
+        self.assertTrue(first.session_changed)
+        self.assertTrue(first.force_republish)
+
+        repeated_a = coordinator.observe(True, 10, publisher_a)
+        self.assertTrue(repeated_a.accepted)
+        self.assertFalse(repeated_a.session_changed)
+        self.assertFalse(repeated_a.force_republish)
+
+        first_b = coordinator.observe(True, 10, publisher_b)
+        self.assertTrue(first_b.accepted)
+        self.assertTrue(first_b.session_changed)
+        self.assertTrue(first_b.force_republish)
+
+        repeated_b = coordinator.observe(True, 10, publisher_b)
+        self.assertTrue(repeated_b.accepted)
+        self.assertFalse(repeated_b.session_changed)
+        self.assertFalse(repeated_b.force_republish)
+
+        retired_a = coordinator.observe(True, 11, publisher_a)
+        self.assertFalse(retired_a.accepted)
+        self.assertTrue(retired_a.gate_active)
+        self.assertEqual(retired_a.generation, 10)
+
+    def test_invalid_unknown_state_does_not_poison_current_publisher(self):
+        coordinator = (
+            cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
+        )
+        publisher_a = self.publisher_identity("rmw-a", [1])
+        publisher_b = self.publisher_identity("rmw-a", [2])
+        publisher_c = self.publisher_identity("rmw-a", [3])
+        coordinator.observe(True, 10, publisher_a)
+        coordinator.observe(True, 10, publisher_b)
+
+        old_active = coordinator.observe(True, 9, publisher_c)
+        mismatched_release = coordinator.observe(False, 11, publisher_c)
+        self.assertFalse(old_active.accepted)
+        self.assertFalse(mismatched_release.accepted)
+        self.assertTrue(mismatched_release.gate_active)
+        self.assertEqual(mismatched_release.generation, 10)
+
+        current_b = coordinator.observe(True, 10, publisher_b)
+        self.assertTrue(current_b.accepted)
+        self.assertFalse(current_b.session_changed)
+        self.assertFalse(current_b.force_republish)
+
+        higher_active = coordinator.observe(True, 11, publisher_c)
+        self.assertTrue(higher_active.accepted)
+        self.assertTrue(higher_active.session_changed)
+        self.assertTrue(higher_active.force_republish)
+        self.assertEqual(higher_active.generation, 11)
+        self.assertFalse(coordinator.observe(True, 12, publisher_b).accepted)
+
+    def test_new_publisher_can_commit_exact_release_without_reissue(self):
+        coordinator = (
+            cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
+        )
+        publisher_a = self.publisher_identity("rmw-a", [1])
+        publisher_b = self.publisher_identity("rmw-a", [2])
+        coordinator.observe(True, 20, publisher_a)
+
+        released = coordinator.observe(False, 20, publisher_b)
+
+        self.assertTrue(released.accepted)
+        self.assertFalse(released.gate_active)
+        self.assertEqual(released.generation, 20)
+        self.assertTrue(released.session_changed)
+        self.assertFalse(released.force_republish)
+        repeated_release = coordinator.observe(False, 20, publisher_b)
+        self.assertTrue(repeated_release.accepted)
+        self.assertFalse(repeated_release.session_changed)
+        self.assertFalse(repeated_release.force_republish)
+
+    def test_untrackable_identity_cannot_release_or_poison_tracked_state(self):
+        coordinator = (
+            cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
+        )
+        invalid = self.publisher_identity("rmw-a", [0, 0, 0])
+        publisher_a = self.publisher_identity("rmw-a", [1, 2, 3])
+
+        initial_active = coordinator.observe(True, 30, invalid)
+        self.assertTrue(initial_active.accepted)
+        self.assertFalse(initial_active.session_changed)
+        self.assertFalse(initial_active.force_republish)
+        self.assertFalse(coordinator.observe(False, 30, invalid).accepted)
+        self.assertTrue(coordinator.active())
+        self.assertEqual(coordinator.generation(), 30)
+
+        first_tracked = coordinator.observe(True, 30, publisher_a)
+        self.assertTrue(first_tracked.accepted)
+        self.assertTrue(first_tracked.session_changed)
+        self.assertTrue(first_tracked.force_republish)
+        self.assertFalse(coordinator.observe(True, 31, invalid).accepted)
+        self.assertFalse(coordinator.observe(False, 30, invalid).accepted)
+        self.assertTrue(coordinator.active())
+        self.assertEqual(coordinator.generation(), 30)
+
+        current = coordinator.observe(True, 30, publisher_a)
+        self.assertTrue(current.accepted)
+        self.assertFalse(current.session_changed)
+
+        inactive_coordinator = (
+            cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
+        )
+        self.assertFalse(inactive_coordinator.observe(False, 1, invalid).accepted)
+        self.assertFalse(inactive_coordinator.has_state())
+
+    def test_tracker_capacity_exhaustion_is_atomic_and_fails_closed(self):
+        coordinator = (
+            cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator(0)
+        )
+        publisher_a = self.publisher_identity("rmw-a", [1])
+        publisher_b = self.publisher_identity("rmw-a", [2])
+        coordinator.observe(True, 40, publisher_a)
+
+        higher = coordinator.observe(True, 41, publisher_b)
+        release = coordinator.observe(False, 40, publisher_b)
+        self.assertFalse(higher.accepted)
+        self.assertFalse(release.accepted)
+        self.assertTrue(coordinator.active())
+        self.assertEqual(coordinator.generation(), 40)
+
+        current = coordinator.observe(True, 40, publisher_a)
+        self.assertTrue(current.accepted)
+        self.assertFalse(current.session_changed)
+        self.assertFalse(current.force_republish)
 
 
 class JoystickMapperRuntimeTest(unittest.TestCase):

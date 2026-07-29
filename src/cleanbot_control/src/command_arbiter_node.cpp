@@ -24,7 +24,9 @@
 #include "cleanbot_interfaces/msg/brush_command.hpp"
 #include "cleanbot_interfaces/msg/maintenance_state.hpp"
 #include "cleanbot_interfaces/msg/vehicle_command.hpp"
+#include "rclcpp/message_info.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rmw/types.h"
 
 namespace cleanbot {
 namespace control {
@@ -40,10 +42,11 @@ class CommandArbiterNode : public rclcpp::Node {
         cleanbot_interfaces::msg::MaintenanceState>(
         "/system/maintenance_state",
         common::latched_status_qos(),
-        std::bind(
-            &CommandArbiterNode::onMaintenanceState,
-            this,
-            std::placeholders::_1));
+        [this](
+            const MaintenanceState::SharedPtr message,
+            const rclcpp::MessageInfo& message_info) {
+          onMaintenanceState(message, message_info);
+        });
 
     // 2. 分别订阅五类车辆命令。来源类型由订阅主题确定，不相信消息自带的priority。
     emergency_subscription_ = subscribe(
@@ -121,27 +124,51 @@ class CommandArbiterNode : public rclcpp::Node {
     publishIfChanged();
   }
 
-  void onMaintenanceState(const MaintenanceState::SharedPtr message) {
-    if (!cacheMaintenanceState(*message)) {
+  void onMaintenanceState(
+      const MaintenanceState::SharedPtr message,
+      const rclcpp::MessageInfo& message_info) {
+    const auto observation = cacheMaintenanceState(
+        *message, publisherIdentity(message_info));
+    if (!observation.accepted) {
       return;
     }
     if (configured_ && arbiter_) {
       // An inactive state must carry the exact generation that activated the gate.
       arbiter_->set_maintenance(message->gate_active, message->generation);
+      if (observation.force_republish && observation.gate_active) {
+        has_last_output_ = false;
+      }
       publishIfChanged();
     }
   }
 
-  bool cacheMaintenanceState(const MaintenanceState& state) {
-    if (!maintenance_cache_.update(state.gate_active, state.generation)) {
-      return false;
+  MaintenancePublisherObservation cacheMaintenanceState(
+      const MaintenanceState& state,
+      const common::PublisherIdentity& publisher_identity) {
+    const auto observation = maintenance_coordinator_.observe(
+        state.gate_active, state.generation, publisher_identity);
+    if (observation.accepted) {
+      cached_maintenance_state_ = state;
     }
-    cached_maintenance_state_ = state;
-    return true;
+    return observation;
+  }
+
+  static common::PublisherIdentity publisherIdentity(
+      const rclcpp::MessageInfo& message_info) {
+    const auto& gid =
+        message_info.get_rmw_message_info().publisher_gid;
+    common::PublisherIdentity identity;
+    if (gid.implementation_identifier != nullptr) {
+      identity.implementation_identifier = gid.implementation_identifier;
+    }
+    identity.gid.assign(
+        gid.data,
+        gid.data + RMW_GID_STORAGE_SIZE);
+    return identity;
   }
 
   void applyCachedMaintenanceState() {
-    if (!arbiter_ || !maintenance_cache_.has_state()) {
+    if (!arbiter_ || !maintenance_coordinator_.has_state()) {
       return;
     }
     arbiter_->set_maintenance(
@@ -288,7 +315,7 @@ class CommandArbiterNode : public rclcpp::Node {
 
   std::unique_ptr<CommandArbiterCore> arbiter_;
   std::unique_ptr<config::ConfigClient> config_client_;
-  MaintenanceGateCache maintenance_cache_;
+  MaintenancePublisherCoordinator maintenance_coordinator_;
   MaintenanceState cached_maintenance_state_;
   bool configured_{false};
   ControlCommand last_output_;

@@ -1,8 +1,11 @@
 #ifndef CLEANBOT_CONTROL__COMMAND_ARBITER_CORE_HPP_
 #define CLEANBOT_CONTROL__COMMAND_ARBITER_CORE_HPP_
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+
+#include "cleanbot_common/publisher_epoch_tracker.hpp"
 
 namespace cleanbot {
 namespace control {
@@ -58,6 +61,40 @@ class MaintenanceGateCache {
   bool has_state_{false};
   bool active_{false};
   std::uint64_t generation_{0u};
+};
+
+struct MaintenancePublisherObservation {
+  bool accepted{false};
+  bool gate_active{false};
+  std::uint64_t generation{0u};
+  bool session_changed{false};
+  bool force_republish{false};
+};
+
+class MaintenancePublisherCoordinator {
+ public:
+  explicit MaintenancePublisherCoordinator(
+      std::size_t maximum_retired_identities = 1024u,
+      std::uint64_t maximum_epoch =
+          common::PublisherEpochTracker::default_maximum_epoch());
+
+  MaintenancePublisherObservation observe(
+      bool gate_active,
+      std::uint64_t generation,
+      const common::PublisherIdentity& publisher_identity);
+  bool has_state() const;
+  bool active() const;
+  std::uint64_t generation() const;
+
+ private:
+  MaintenancePublisherObservation result(
+      bool accepted,
+      bool session_changed = false,
+      bool force_republish = false) const;
+
+  MaintenanceGateCache gate_;
+  common::PublisherEpochTracker publisher_tracker_;
+  bool has_tracked_publisher_{false};
 };
 
 class CommandArbiterCore {
