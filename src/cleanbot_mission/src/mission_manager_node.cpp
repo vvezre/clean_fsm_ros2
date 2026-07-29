@@ -37,12 +37,15 @@
 #include "cleanbot_interfaces/msg/brush_command.hpp"
 #include "cleanbot_interfaces/msg/command_execution_status.hpp"
 #include "cleanbot_interfaces/msg/hardware_status.hpp"
+#include "cleanbot_interfaces/msg/maintenance_state.hpp"
 #include "cleanbot_interfaces/msg/rtk_fix.hpp"
 #include "cleanbot_interfaces/msg/tracking_status.hpp"
 #include "cleanbot_interfaces/msg/tracking_target.hpp"
 #include "cleanbot_interfaces/msg/vehicle_command.hpp"
 #include "cleanbot_interfaces/msg/vehicle_state.hpp"
+#include "cleanbot_interfaces/srv/set_maintenance_mode.hpp"
 #include "cleanbot_interfaces/srv/set_mission_pause.hpp"
+#include "cleanbot_mission/maintenance_runtime.hpp"
 #include "cleanbot_mission/mission_checkpoint.hpp"
 #include "cleanbot_mission/mission_state_machine.hpp"
 #include "cleanbot_mission/straight_edge_guard.hpp"
@@ -50,6 +53,7 @@
 #include "cleanbot_mission/waypoint_plan.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "rmw/types.h"
 
 namespace cleanbot {
 namespace mission {
@@ -69,8 +73,12 @@ class MissionManagerNode : public rclcpp::Node {
   using TrackingStatus = cleanbot_interfaces::msg::TrackingStatus;
   using CommandExecutionStatus =
       cleanbot_interfaces::msg::CommandExecutionStatus;
+  using MaintenanceState = cleanbot_interfaces::msg::MaintenanceState;
 
-  MissionManagerNode() : Node("mission_manager_node") {
+  MissionManagerNode()
+      : Node("mission_manager_node"),
+        maintenance_runtime_(
+            "/var/lib/cleanbot/runtime/maintenance.lock") {
     tracking_target_publisher_ =
         create_publisher<cleanbot_interfaces::msg::TrackingTarget>(
         "/tracking/target", common::latest_command_qos());
@@ -83,9 +91,17 @@ class MissionManagerNode : public rclcpp::Node {
     vehicle_state_publisher_ =
         create_publisher<cleanbot_interfaces::msg::VehicleState>(
         "/vehicle/state", common::latched_status_qos());
+    maintenance_state_publisher_ = create_publisher<MaintenanceState>(
+        "/system/maintenance_state", common::latched_status_qos());
+    if (!maintenance_runtime_.initialize(true)) {
+      RCLCPP_ERROR(
+          get_logger(),
+          "maintenance state restore failed; mission admission is closed");
+    }
+    publishMaintenanceState(maintenance_runtime_.snapshot());
     vehicle_state_timer_ = create_wall_timer(
         std::chrono::milliseconds(200),
-        std::bind(&MissionManagerNode::publishVehicleState, this));
+        std::bind(&MissionManagerNode::publishPeriodicState, this));
 
     tracking_status_subscription_ = create_subscription<TrackingStatus>(
         "/tracking/status",
@@ -99,7 +115,11 @@ class MissionManagerNode : public rclcpp::Node {
         create_subscription<cleanbot_interfaces::msg::HardwareStatus>(
         "/hardware/status",
         common::hardware_status_qos(),
-        std::bind(&MissionManagerNode::onHardwareStatus, this, std::placeholders::_1));
+        std::bind(
+            &MissionManagerNode::onHardwareStatus,
+            this,
+            std::placeholders::_1,
+            std::placeholders::_2));
     command_status_subscription_ = create_subscription<CommandExecutionStatus>(
         "/hardware/command_status",
         common::command_status_qos(),
@@ -114,6 +134,14 @@ class MissionManagerNode : public rclcpp::Node {
         "/mission/set_pause",
         std::bind(
             &MissionManagerNode::onSetPause,
+            this,
+            std::placeholders::_1,
+            std::placeholders::_2));
+    maintenance_service_ =
+        create_service<cleanbot_interfaces::srv::SetMaintenanceMode>(
+        "/system/set_maintenance",
+        std::bind(
+            &MissionManagerNode::onSetMaintenance,
             this,
             std::placeholders::_1,
             std::placeholders::_2));
@@ -232,6 +260,9 @@ class MissionManagerNode : public rclcpp::Node {
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const ExecuteCleaning::Goal> goal) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (maintenanceAdmissionClosedLocked("cleaning")) {
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     if (!configured_) {
       RCLCPP_WARN(get_logger(), "CONFIG_NOT_READY: cleaning goal rejected");
       return rclcpp_action::GoalResponse::REJECT;
@@ -240,6 +271,7 @@ class MissionManagerNode : public rclcpp::Node {
       return rclcpp_action::GoalResponse::REJECT;
     }
     goal_reserved_ = true;
+    maintenance_runtime_.setMissionIdle(false);
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -281,6 +313,9 @@ class MissionManagerNode : public rclcpp::Node {
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const NavigateWaypoints::Goal> goal) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (maintenanceAdmissionClosedLocked("navigate_waypoints")) {
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     if (!configured_) {
       RCLCPP_WARN(get_logger(), "CONFIG_NOT_READY: waypoint goal rejected");
       return rclcpp_action::GoalResponse::REJECT;
@@ -302,6 +337,7 @@ class MissionManagerNode : public rclcpp::Node {
       }
     }
     goal_reserved_ = true;
+    maintenance_runtime_.setMissionIdle(false);
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -352,6 +388,9 @@ class MissionManagerNode : public rclcpp::Node {
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const ReturnHome::Goal> goal) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (maintenanceAdmissionClosedLocked("return_home")) {
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     if (!configured_) {
       RCLCPP_WARN(get_logger(), "CONFIG_NOT_READY: return-home goal rejected");
       return rclcpp_action::GoalResponse::REJECT;
@@ -361,6 +400,7 @@ class MissionManagerNode : public rclcpp::Node {
       return rclcpp_action::GoalResponse::REJECT;
     }
     goal_reserved_ = true;
+    maintenance_runtime_.setMissionIdle(false);
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -403,6 +443,9 @@ class MissionManagerNode : public rclcpp::Node {
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const RecoverMission::Goal> goal) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (maintenanceAdmissionClosedLocked("recover")) {
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     if (!configured_ || !cleaning_checkpoint_store_ ||
         !return_home_checkpoint_store_) {
       RCLCPP_WARN(get_logger(), "CONFIG_NOT_READY: recovery goal rejected");
@@ -430,6 +473,7 @@ class MissionManagerNode : public rclcpp::Node {
       return rclcpp_action::GoalResponse::REJECT;
     }
     goal_reserved_ = true;
+    maintenance_runtime_.setMissionIdle(false);
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -503,6 +547,64 @@ class MissionManagerNode : public rclcpp::Node {
     condition_.notify_all();
   }
 
+  bool maintenanceAdmissionClosedLocked(const char* const action) {
+    if (!maintenance_runtime_.admissionClosed()) {
+      return false;
+    }
+    const auto& snapshot = maintenance_runtime_.snapshot();
+    RCLCPP_WARN(
+        get_logger(),
+        "MAINTENANCE_ADMISSION_CLOSED: action=%s phase=%s blocker=%s",
+        action,
+        snapshot.phase.c_str(),
+        snapshot.blocker_code.c_str());
+    return true;
+  }
+
+  void onSetMaintenance(
+      const std::shared_ptr<
+          cleanbot_interfaces::srv::SetMaintenanceMode::Request> request,
+      std::shared_ptr<
+          cleanbot_interfaces::srv::SetMaintenanceMode::Response> response) {
+    MaintenanceRuntimeSnapshot maintenance_snapshot;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      const bool mission_idle = !mission_active_ && !goal_reserved_;
+      maintenance_runtime_.setMissionIdle(mission_idle);
+
+      MaintenanceTransitionResult transition;
+      if (request->enable && request->generation != 0u) {
+        const auto& current = maintenance_runtime_.snapshot();
+        transition.accepted = false;
+        transition.gate_active = current.gate_active;
+        transition.ready = false;
+        transition.generation = current.generation;
+        transition.code = "INVALID";
+        transition.message =
+            "maintenance enable requests must use generation zero";
+      } else if (request->enable) {
+        transition = maintenance_runtime_.enable(
+            request->requester,
+            request->reason,
+            mission_idle);
+      } else {
+        transition = maintenance_runtime_.disable(
+            request->generation,
+            request->requester);
+      }
+
+      maintenance_snapshot = maintenance_runtime_.snapshot();
+      response->accepted = transition.accepted;
+      response->gate_active = maintenance_snapshot.gate_active;
+      response->ready = maintenance_snapshot.ready;
+      response->generation = transition.generation;
+      response->code = transition.code;
+      response->message = transition.message;
+      condition_.notify_all();
+    }
+    publishMaintenanceState(maintenance_snapshot);
+  }
+
   void onRtkFix(const cleanbot_interfaces::msg::RtkFix::SharedPtr fix) {
     std::lock_guard<std::mutex> lock(mutex_);
     latest_rtk_ = *fix;
@@ -512,8 +614,38 @@ class MissionManagerNode : public rclcpp::Node {
   }
 
   void onHardwareStatus(
-      const cleanbot_interfaces::msg::HardwareStatus::SharedPtr hardware) {
+      const cleanbot_interfaces::msg::HardwareStatus::SharedPtr hardware,
+      const rclcpp::MessageInfo& info) {
+    const auto& publisher_gid =
+        info.get_rmw_message_info().publisher_gid;
+    cleanbot::common::PublisherIdentity publisher;
+    if (publisher_gid.implementation_identifier != nullptr) {
+      publisher.implementation_identifier =
+          publisher_gid.implementation_identifier;
+    }
+    publisher.gid.assign(
+        publisher_gid.data,
+        publisher_gid.data + RMW_GID_STORAGE_SIZE);
+
+    MaintenanceHardwareSample sample;
+    sample.frame_sequence = hardware->frame_sequence;
+    sample.connected = hardware->connected;
+    sample.x_speed = hardware->x_speed;
+    sample.z_speed = hardware->z_speed;
+    sample.brush_speed = hardware->brush_speed;
+    const auto observed_at = monotonicNanoseconds();
+
     std::lock_guard<std::mutex> lock(mutex_);
+    const auto observation = maintenance_runtime_.observeHardware(
+        publisher, sample, observed_at);
+    if (observation.status == MaintenanceHardwareStatus::kRetired) {
+      return;
+    }
+    if (observation.status != MaintenanceHardwareStatus::kAccepted) {
+      condition_.notify_all();
+      return;
+    }
+
     latest_hardware_ = *hardware;
     has_hardware_ = true;
     latest_hardware_at_ = std::chrono::steady_clock::now();
@@ -539,7 +671,14 @@ class MissionManagerNode : public rclcpp::Node {
   }
 
   void onCommandStatus(const CommandExecutionStatus::SharedPtr status) {
+    CommandStatusEvidence evidence;
+    evidence.generation = status->request_id;
+    evidence.request_id = status->request_id;
+    evidence.command_id = status->command_id;
+    evidence.source = status->source;
+    evidence.state = status->state;
     std::lock_guard<std::mutex> lock(mutex_);
+    maintenance_runtime_.observeCommandStatus(evidence);
     if (mission_active_ && status->request_id == expected_turn_request_id_ &&
         status->source == "mission_turn") {
       latest_turn_status_ = *status;
@@ -549,7 +688,18 @@ class MissionManagerNode : public rclcpp::Node {
   }
 
   void onFinalCommand(const VehicleCommand::SharedPtr command) {
+    FinalCommandEvidence evidence;
+    evidence.generation = command->request_id;
+    evidence.request_id = command->request_id;
+    evidence.command_id = command->command_id;
+    evidence.source = command->source;
+    evidence.active = command->active;
+    evidence.brake = command->brake;
+    evidence.x_speed = command->x_speed;
+    evidence.z_speed = command->z_speed;
+    evidence.brush_speed = command->brush_speed;
     std::lock_guard<std::mutex> lock(mutex_);
+    maintenance_runtime_.observeFinalCommand(evidence);
     latest_final_command_ = *command;
     has_final_command_ = true;
     if (!mission_active_ || !command->active) {
@@ -1806,6 +1956,7 @@ class MissionManagerNode : public rclcpp::Node {
 
     std::lock_guard<std::mutex> lock(mutex_);
     mission_active_ = false;
+    maintenance_runtime_.setMissionIdle(!goal_reserved_);
     preflight_complete_ = false;
     pause_requested_ = false;
     edge_confirmation_required_ = false;
@@ -1858,6 +2009,7 @@ class MissionManagerNode : public rclcpp::Node {
 
     std::lock_guard<std::mutex> lock(mutex_);
     mission_active_ = false;
+    maintenance_runtime_.setMissionIdle(!goal_reserved_);
     preflight_complete_ = false;
     pause_requested_ = false;
     edge_confirmation_required_ = false;
@@ -2230,10 +2382,41 @@ class MissionManagerNode : public rclcpp::Node {
     return ageSeconds(latest_hardware_at_) <= hardware_freshness_timeout_sec_;
   }
 
-  void publishVehicleState() {
+  void publishMaintenanceState(
+      const MaintenanceRuntimeSnapshot& snapshot) {
+    MaintenanceState message;
+    message.stamp = now();
+    message.generation = snapshot.generation;
+    message.gate_active = snapshot.gate_active;
+    message.mission_idle = snapshot.mission_idle;
+    message.command_gate_applied = snapshot.command_gate_applied;
+    message.brake_acknowledged = snapshot.brake_acknowledged;
+    message.hardware_fresh = snapshot.hardware_fresh;
+    message.linear_speed_zero = snapshot.linear_speed_zero;
+    message.angular_speed_zero = snapshot.angular_speed_zero;
+    message.brush_off = snapshot.brush_off;
+    message.ready = snapshot.ready;
+    message.phase = snapshot.phase;
+    message.blocker_code = snapshot.blocker_code;
+    message.message = snapshot.message;
+    maintenance_state_publisher_->publish(message);
+  }
+
+  void publishPeriodicState() {
     VehicleStateInput input;
+    MaintenanceRuntimeSnapshot maintenance_snapshot;
     {
       std::lock_guard<std::mutex> lock(mutex_);
+      maintenance_runtime_.setMissionIdle(
+          !mission_active_ && !goal_reserved_);
+      const auto freshness_timeout_nanoseconds =
+          static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::duration<double>(
+                  std::max(0.0, hardware_freshness_timeout_sec_))).count());
+      maintenance_runtime_.refreshHardware(
+          monotonicNanoseconds(), freshness_timeout_nanoseconds);
+      maintenance_snapshot = maintenance_runtime_.snapshot();
       input.configured = configured_;
       input.hardware_ready = hardwareReadyLocked();
       input.rtk_ready = rtkReadyLocked();
@@ -2255,6 +2438,7 @@ class MissionManagerNode : public rclcpp::Node {
       input.total_segments = state_total_segments_;
     }
 
+    publishMaintenanceState(maintenance_snapshot);
     const auto snapshot = build_vehicle_state(input);
     cleanbot_interfaces::msg::VehicleState message;
     message.stamp = now();
@@ -2296,6 +2480,12 @@ class MissionManagerNode : public rclcpp::Node {
             std::chrono::steady_clock::now().time_since_epoch()).count());
   }
 
+  static std::uint64_t monotonicNanoseconds() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+  }
+
   static std::int64_t wallClockMilliseconds() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -2306,6 +2496,7 @@ class MissionManagerNode : public rclcpp::Node {
       const std::string& terminal_message) {
     std::lock_guard<std::mutex> lock(mutex_);
     mission_active_ = false;
+    maintenance_runtime_.setMissionIdle(!goal_reserved_);
     preflight_complete_ = false;
     pause_requested_ = false;
     edge_confirmation_required_ = false;
@@ -2501,6 +2692,7 @@ class MissionManagerNode : public rclcpp::Node {
   std::filesystem::path checkpoint_path_;
   std::unique_ptr<MissionCheckpointStore> cleaning_checkpoint_store_;
   std::unique_ptr<MissionCheckpointStore> return_home_checkpoint_store_;
+  MaintenanceRuntime maintenance_runtime_;
 
   std::mutex mutex_;
   std::condition_variable condition_;
@@ -2552,6 +2744,8 @@ class MissionManagerNode : public rclcpp::Node {
   rclcpp_action::Server<ReturnHome>::SharedPtr return_home_action_server_;
   rclcpp_action::Server<RecoverMission>::SharedPtr recover_action_server_;
   rclcpp::Service<cleanbot_interfaces::srv::SetMissionPause>::SharedPtr pause_service_;
+  rclcpp::Service<cleanbot_interfaces::srv::SetMaintenanceMode>::SharedPtr
+      maintenance_service_;
   rclcpp::Publisher<cleanbot_interfaces::msg::TrackingTarget>::SharedPtr
       tracking_target_publisher_;
   rclcpp::Publisher<VehicleCommand>::SharedPtr mission_command_publisher_;
@@ -2560,6 +2754,8 @@ class MissionManagerNode : public rclcpp::Node {
   rclcpp::Publisher<VehicleCommand>::SharedPtr safety_command_publisher_;
   rclcpp::Publisher<cleanbot_interfaces::msg::VehicleState>::SharedPtr
       vehicle_state_publisher_;
+  rclcpp::Publisher<MaintenanceState>::SharedPtr
+      maintenance_state_publisher_;
   rclcpp::Subscription<TrackingStatus>::SharedPtr tracking_status_subscription_;
   rclcpp::Subscription<cleanbot_interfaces::msg::RtkFix>::SharedPtr rtk_subscription_;
   rclcpp::Subscription<cleanbot_interfaces::msg::HardwareStatus>::SharedPtr

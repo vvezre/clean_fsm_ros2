@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(rmw REQUIRED)
 find_package(cleanbot_common REQUIRED)
 find_package(cleanbot_config REQUIRED)
 find_package(cleanbot_interfaces REQUIRED)
@@ -41,6 +42,7 @@ ament_target_dependencies(
   mission_manager_node
   rclcpp
   rclcpp_action
+  rmw
   cleanbot_common
   cleanbot_config
   cleanbot_interfaces

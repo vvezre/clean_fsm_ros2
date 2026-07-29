@@ -9,6 +9,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
+  <depend>rmw</depend>
   <depend>cleanbot_common</depend>
   <depend>cleanbot_config</depend>
   <depend>cleanbot_interfaces</depend>
