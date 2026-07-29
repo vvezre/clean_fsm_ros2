@@ -481,6 +481,12 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(coordinator.active())
         self.assertEqual(coordinator.generation(), 30)
 
+        premature_valid_release = coordinator.observe(False, 30, publisher_a)
+        self.assertFalse(premature_valid_release.accepted)
+        self.assertTrue(premature_valid_release.gate_active)
+        self.assertEqual(premature_valid_release.generation, 30)
+        self.assertFalse(premature_valid_release.session_changed)
+
         first_tracked = coordinator.observe(True, 30, publisher_a)
         self.assertTrue(first_tracked.accepted)
         self.assertTrue(first_tracked.session_changed)
@@ -493,6 +499,13 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         current = coordinator.observe(True, 30, publisher_a)
         self.assertTrue(current.accepted)
         self.assertFalse(current.session_changed)
+
+        tracked_release = coordinator.observe(False, 30, publisher_a)
+        self.assertTrue(tracked_release.accepted)
+        self.assertFalse(tracked_release.gate_active)
+        self.assertEqual(tracked_release.generation, 30)
+        self.assertFalse(tracked_release.session_changed)
+        self.assertFalse(tracked_release.force_republish)
 
         inactive_coordinator = (
             cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()

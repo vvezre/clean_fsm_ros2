@@ -394,6 +394,13 @@ TEST(
   EXPECT_TRUE(invalid_release.gate_active);
   EXPECT_EQ(invalid_release.generation, 30u);
 
+  const auto premature_valid_release =
+      coordinator.observe(false, 30u, publisher_a);
+  EXPECT_FALSE(premature_valid_release.accepted);
+  EXPECT_TRUE(premature_valid_release.gate_active);
+  EXPECT_EQ(premature_valid_release.generation, 30u);
+  EXPECT_FALSE(premature_valid_release.session_changed);
+
   const auto first_tracked = coordinator.observe(true, 30u, publisher_a);
   EXPECT_TRUE(first_tracked.accepted);
   EXPECT_TRUE(first_tracked.session_changed);
@@ -412,6 +419,14 @@ TEST(
   EXPECT_TRUE(current.accepted);
   EXPECT_FALSE(current.session_changed);
   EXPECT_FALSE(current.force_republish);
+
+  const auto tracked_release =
+      coordinator.observe(false, 30u, publisher_a);
+  EXPECT_TRUE(tracked_release.accepted);
+  EXPECT_FALSE(tracked_release.gate_active);
+  EXPECT_EQ(tracked_release.generation, 30u);
+  EXPECT_FALSE(tracked_release.session_changed);
+  EXPECT_FALSE(tracked_release.force_republish);
 
   cleanbot::control::MaintenancePublisherCoordinator inactive_coordinator;
   EXPECT_FALSE(

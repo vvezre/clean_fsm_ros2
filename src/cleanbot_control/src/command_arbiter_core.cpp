@@ -66,6 +66,10 @@ MaintenancePublisherObservation MaintenancePublisherCoordinator::observe(
     return result(true);
   }
 
+  if (!has_tracked_publisher_ && !gate_active) {
+    return result(false);
+  }
+
   const bool repeated_current_release =
       publisher_result.status == common::PublisherEpochStatus::kAccepted &&
       !publisher_result.session_changed &&
