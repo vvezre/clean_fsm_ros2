@@ -19,6 +19,12 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_cpp_standard test/test_cpp_standard.cpp)
   ament_target_dependencies(test_cpp_standard rclcpp)
+
+  ament_add_gtest(
+    test_publisher_epoch_tracker
+    test/test_publisher_epoch_tracker.cpp
+  )
+  target_include_directories(test_publisher_epoch_tracker PRIVATE include)
 endif()
 
 ament_package()

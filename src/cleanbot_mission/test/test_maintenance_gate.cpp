@@ -14,6 +14,7 @@ using cleanbot::mission::CommandStatusEvidence;
 using cleanbot::mission::FinalCommandEvidence;
 using cleanbot::mission::HardwareEvidence;
 using cleanbot::mission::MaintenanceGate;
+using cleanbot::mission::MaintenanceGateSnapshot;
 
 constexpr std::uint64_t kGeneration = 41u;
 constexpr std::uint64_t kCommandId = 7001u;
@@ -83,6 +84,24 @@ HardwareEvidence hardwareInEpoch(
       0,
       0,
       publisher_epoch);
+}
+
+void expectSnapshotsEqual(
+    const MaintenanceGateSnapshot& actual,
+    const MaintenanceGateSnapshot& expected) {
+  EXPECT_EQ(actual.generation, expected.generation);
+  EXPECT_EQ(actual.gate_active, expected.gate_active);
+  EXPECT_EQ(actual.mission_idle, expected.mission_idle);
+  EXPECT_EQ(actual.command_gate_applied, expected.command_gate_applied);
+  EXPECT_EQ(actual.brake_acknowledged, expected.brake_acknowledged);
+  EXPECT_EQ(actual.hardware_fresh, expected.hardware_fresh);
+  EXPECT_EQ(actual.linear_speed_zero, expected.linear_speed_zero);
+  EXPECT_EQ(actual.angular_speed_zero, expected.angular_speed_zero);
+  EXPECT_EQ(actual.brush_off, expected.brush_off);
+  EXPECT_EQ(actual.ready, expected.ready);
+  EXPECT_EQ(actual.phase, expected.phase);
+  EXPECT_EQ(actual.blocker_code, expected.blocker_code);
+  EXPECT_EQ(actual.message, expected.message);
 }
 
 }  // namespace
@@ -480,6 +499,121 @@ TEST(MaintenanceGate, GenerationMustIncreaseAndOldEvidenceIsIgnored) {
   gate.observeHardware(hardware(1u));
   gate.observeHardware(hardware(2u));
   EXPECT_TRUE(gate.snapshot().ready);
+}
+
+TEST(MaintenanceGate, RestoresInactivePersistentStateWithoutActivatingGate) {
+  MaintenanceGate gate;
+
+  ASSERT_TRUE(gate.restorePersistentState(kGeneration, true));
+
+  const auto snapshot = gate.snapshot();
+  EXPECT_EQ(gate.lastGeneration(), kGeneration);
+  EXPECT_EQ(snapshot.generation, 0u);
+  EXPECT_FALSE(snapshot.gate_active);
+  EXPECT_TRUE(snapshot.mission_idle);
+  EXPECT_FALSE(snapshot.command_gate_applied);
+  EXPECT_FALSE(snapshot.brake_acknowledged);
+  EXPECT_FALSE(snapshot.hardware_fresh);
+  EXPECT_FALSE(snapshot.ready);
+  EXPECT_EQ(snapshot.phase, "INACTIVE");
+  EXPECT_FALSE(gate.request(kGeneration, true));
+  EXPECT_TRUE(gate.request(kGeneration + 1u, true));
+}
+
+TEST(MaintenanceGate, RestoresActivePersistentStateWithoutReadinessEvidence) {
+  MaintenanceGate gate;
+
+  ASSERT_TRUE(
+      gate.restorePersistentState(kGeneration, kGeneration, true));
+
+  auto snapshot = gate.snapshot();
+  EXPECT_EQ(gate.lastGeneration(), kGeneration);
+  EXPECT_EQ(snapshot.generation, kGeneration);
+  EXPECT_TRUE(snapshot.gate_active);
+  EXPECT_TRUE(snapshot.mission_idle);
+  EXPECT_FALSE(snapshot.command_gate_applied);
+  EXPECT_FALSE(snapshot.brake_acknowledged);
+  EXPECT_FALSE(snapshot.hardware_fresh);
+  EXPECT_FALSE(snapshot.linear_speed_zero);
+  EXPECT_FALSE(snapshot.angular_speed_zero);
+  EXPECT_FALSE(snapshot.brush_off);
+  EXPECT_FALSE(snapshot.ready);
+  EXPECT_EQ(snapshot.phase, "WAITING_FOR_COMMAND_GATE");
+
+  applyBrakeAck(&gate);
+  gate.observeHardware(hardware(1u));
+  EXPECT_FALSE(gate.snapshot().ready);
+  gate.observeHardware(hardware(2u));
+  EXPECT_TRUE(gate.snapshot().ready);
+}
+
+TEST(MaintenanceGate, RejectsInvalidPersistentStateWithoutMutation) {
+  MaintenanceGate gate;
+  const auto before = gate.snapshot();
+
+  EXPECT_FALSE(gate.restorePersistentState(0u, 0u, true));
+  EXPECT_FALSE(
+      gate.restorePersistentState(kGeneration, kGeneration + 1u, true));
+  EXPECT_FALSE(gate.restorePersistentState(kGeneration, 0u, true));
+
+  const auto after = gate.snapshot();
+  EXPECT_EQ(gate.lastGeneration(), 0u);
+  expectSnapshotsEqual(after, before);
+
+  EXPECT_TRUE(gate.restorePersistentState(kGeneration, false));
+}
+
+TEST(MaintenanceGate, RejectsPersistentRestoreAfterGateIsNoLongerPristine) {
+  MaintenanceGate gate;
+  ASSERT_TRUE(gate.request(kGeneration, true));
+  applyBrakeAck(&gate);
+  gate.observeHardware(hardware(1u));
+  gate.observeHardware(hardware(2u));
+  ASSERT_TRUE(gate.snapshot().ready);
+  const auto before = gate.snapshot();
+
+  EXPECT_FALSE(gate.restorePersistentState(kGeneration + 1u, false));
+  EXPECT_FALSE(gate.restorePersistentState(
+      kGeneration + 1u,
+      kGeneration + 1u,
+      false));
+
+  const auto after = gate.snapshot();
+  EXPECT_EQ(gate.lastGeneration(), kGeneration);
+  expectSnapshotsEqual(after, before);
+
+  MaintenanceGate restored_empty;
+  ASSERT_TRUE(restored_empty.restorePersistentState(0u, false));
+  EXPECT_FALSE(
+      restored_empty.restorePersistentState(kGeneration, false));
+  EXPECT_EQ(restored_empty.lastGeneration(), 0u);
+  EXPECT_FALSE(restored_empty.snapshot().gate_active);
+}
+
+TEST(MaintenanceGate, MissionIdleMutationMakesGateNonPristine) {
+  MaintenanceGate gate;
+  gate.setMissionIdle(true);
+  const auto before = gate.snapshot();
+
+  EXPECT_FALSE(gate.restorePersistentState(kGeneration, false));
+
+  const auto after = gate.snapshot();
+  EXPECT_EQ(gate.lastGeneration(), 0u);
+  expectSnapshotsEqual(after, before);
+}
+
+TEST(MaintenanceGate, RestoredMaximumGenerationPreventsFutureRequests) {
+  MaintenanceGate gate;
+  constexpr std::uint64_t maximum =
+      std::numeric_limits<std::uint64_t>::max();
+
+  ASSERT_TRUE(gate.restorePersistentState(maximum, false));
+
+  EXPECT_EQ(gate.lastGeneration(), maximum);
+  EXPECT_FALSE(gate.request(maximum, true));
+  EXPECT_FALSE(gate.request(maximum - 1u, true));
+  EXPECT_FALSE(gate.snapshot().gate_active);
+  EXPECT_EQ(gate.snapshot().generation, 0u);
 }
 
 TEST(MaintenanceGate, MaximumGenerationIsNaturalFailClosedBoundary) {

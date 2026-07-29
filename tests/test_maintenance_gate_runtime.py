@@ -108,6 +108,36 @@ class MaintenanceGateRuntimeTest(unittest.TestCase):
         self.gate.observeFinalCommand(final_command())
         self.gate.observeCommandStatus(command_status(2))
 
+    def assert_snapshots_equal(self, actual, expected):
+        self.assertEqual(int(actual.generation), int(expected.generation))
+        self.assertEqual(bool(actual.gate_active), bool(expected.gate_active))
+        self.assertEqual(bool(actual.mission_idle), bool(expected.mission_idle))
+        self.assertEqual(
+            bool(actual.command_gate_applied),
+            bool(expected.command_gate_applied),
+        )
+        self.assertEqual(
+            bool(actual.brake_acknowledged),
+            bool(expected.brake_acknowledged),
+        )
+        self.assertEqual(
+            bool(actual.hardware_fresh),
+            bool(expected.hardware_fresh),
+        )
+        self.assertEqual(
+            bool(actual.linear_speed_zero),
+            bool(expected.linear_speed_zero),
+        )
+        self.assertEqual(
+            bool(actual.angular_speed_zero),
+            bool(expected.angular_speed_zero),
+        )
+        self.assertEqual(bool(actual.brush_off), bool(expected.brush_off))
+        self.assertEqual(bool(actual.ready), bool(expected.ready))
+        self.assertEqual(str(actual.phase), str(expected.phase))
+        self.assertEqual(str(actual.blocker_code), str(expected.blocker_code))
+        self.assertEqual(str(actual.message), str(expected.message))
+
     def test_rejects_zero_generation_and_new_request_resets_all_evidence(self):
         other = cppyy.gbl.cleanbot.mission.MaintenanceGate()
         self.assertFalse(other.request(0, True))
@@ -515,6 +545,127 @@ class MaintenanceGateRuntimeTest(unittest.TestCase):
         self.gate.observeHardware(hardware_sample(1))
         self.gate.observeHardware(hardware_sample(2))
         self.assertTrue(self.gate.snapshot().ready)
+
+    def test_restores_inactive_state_without_activating_gate(self):
+        gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+
+        self.assertTrue(gate.restorePersistentState(GENERATION, True))
+
+        snapshot = gate.snapshot()
+        self.assertEqual(int(gate.lastGeneration()), GENERATION)
+        self.assertEqual(int(snapshot.generation), 0)
+        self.assertFalse(snapshot.gate_active)
+        self.assertTrue(snapshot.mission_idle)
+        self.assertFalse(snapshot.command_gate_applied)
+        self.assertFalse(snapshot.brake_acknowledged)
+        self.assertFalse(snapshot.hardware_fresh)
+        self.assertFalse(snapshot.ready)
+        self.assertEqual(str(snapshot.phase), "INACTIVE")
+        self.assertFalse(gate.request(GENERATION, True))
+        self.assertTrue(gate.request(GENERATION + 1, True))
+
+    def test_restores_active_state_without_readiness_evidence(self):
+        gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+
+        self.assertTrue(
+            gate.restorePersistentState(GENERATION, GENERATION, True),
+        )
+
+        snapshot = gate.snapshot()
+        self.assertEqual(int(gate.lastGeneration()), GENERATION)
+        self.assertEqual(int(snapshot.generation), GENERATION)
+        self.assertTrue(snapshot.gate_active)
+        self.assertTrue(snapshot.mission_idle)
+        self.assertFalse(snapshot.command_gate_applied)
+        self.assertFalse(snapshot.brake_acknowledged)
+        self.assertFalse(snapshot.hardware_fresh)
+        self.assertFalse(snapshot.linear_speed_zero)
+        self.assertFalse(snapshot.angular_speed_zero)
+        self.assertFalse(snapshot.brush_off)
+        self.assertFalse(snapshot.ready)
+        self.assertEqual(str(snapshot.phase), "WAITING_FOR_COMMAND_GATE")
+
+        gate.observeFinalCommand(final_command())
+        gate.observeCommandStatus(command_status(2))
+        gate.observeHardware(hardware_sample(1))
+        self.assertFalse(gate.snapshot().ready)
+        gate.observeHardware(hardware_sample(2))
+        self.assertTrue(gate.snapshot().ready)
+
+    def test_rejects_invalid_persistent_state_without_mutation(self):
+        gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+        before = gate.snapshot()
+
+        self.assertFalse(gate.restorePersistentState(0, 0, True))
+        self.assertFalse(
+            gate.restorePersistentState(GENERATION, GENERATION + 1, True),
+        )
+        self.assertFalse(
+            gate.restorePersistentState(GENERATION, 0, True),
+        )
+
+        after = gate.snapshot()
+        self.assertEqual(int(gate.lastGeneration()), 0)
+        self.assert_snapshots_equal(after, before)
+
+        self.assertTrue(gate.restorePersistentState(GENERATION, False))
+
+    def test_rejects_restore_after_gate_is_no_longer_pristine(self):
+        gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+        self.assertTrue(gate.request(GENERATION, True))
+        gate.observeFinalCommand(final_command())
+        gate.observeCommandStatus(command_status(2))
+        gate.observeHardware(hardware_sample(1))
+        gate.observeHardware(hardware_sample(2))
+        self.assertTrue(gate.snapshot().ready)
+        before = gate.snapshot()
+
+        self.assertFalse(
+            gate.restorePersistentState(GENERATION + 1, False),
+        )
+        self.assertFalse(
+            gate.restorePersistentState(
+                GENERATION + 1,
+                GENERATION + 1,
+                False,
+            ),
+        )
+
+        after = gate.snapshot()
+        self.assertEqual(int(gate.lastGeneration()), GENERATION)
+        self.assert_snapshots_equal(after, before)
+
+        restored_empty = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+        self.assertTrue(restored_empty.restorePersistentState(0, False))
+        self.assertFalse(
+            restored_empty.restorePersistentState(GENERATION, False),
+        )
+        self.assertEqual(int(restored_empty.lastGeneration()), 0)
+        self.assertFalse(restored_empty.snapshot().gate_active)
+
+    def test_mission_idle_mutation_makes_gate_non_pristine(self):
+        gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+        gate.setMissionIdle(True)
+        before = gate.snapshot()
+
+        self.assertFalse(
+            gate.restorePersistentState(GENERATION, False),
+        )
+
+        after = gate.snapshot()
+        self.assertEqual(int(gate.lastGeneration()), 0)
+        self.assert_snapshots_equal(after, before)
+
+    def test_restored_max_generation_prevents_future_requests(self):
+        gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()
+
+        self.assertTrue(gate.restorePersistentState(MAX_UINT64, False))
+
+        self.assertEqual(int(gate.lastGeneration()), MAX_UINT64)
+        self.assertFalse(gate.request(MAX_UINT64, True))
+        self.assertFalse(gate.request(MAX_UINT64 - 1, True))
+        self.assertFalse(gate.snapshot().gate_active)
+        self.assertEqual(int(gate.snapshot().generation), 0)
 
     def test_max_generation_is_a_natural_fail_closed_boundary(self):
         gate = cppyy.gbl.cleanbot.mission.MaintenanceGate()

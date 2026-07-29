@@ -15,6 +15,25 @@ constexpr std::uint8_t kStateSuperseded = 8u;
 
 }  // namespace
 
+bool MaintenanceGate::restorePersistentState(
+    const std::uint64_t last_generation,
+    const bool mission_idle) {
+  return restorePersistentStateImpl(
+      last_generation,
+      nullptr,
+      mission_idle);
+}
+
+bool MaintenanceGate::restorePersistentState(
+    const std::uint64_t last_generation,
+    const std::uint64_t active_generation,
+    const bool mission_idle) {
+  return restorePersistentStateImpl(
+      last_generation,
+      &active_generation,
+      mission_idle);
+}
+
 bool MaintenanceGate::request(
     const std::uint64_t generation,
     const bool mission_idle) {
@@ -22,6 +41,7 @@ bool MaintenanceGate::request(
     return false;
   }
 
+  pristine_ = false;
   active_ = true;
   generation_ = generation;
   last_generation_ = generation;
@@ -43,6 +63,9 @@ bool MaintenanceGate::release(const std::uint64_t generation) {
 }
 
 void MaintenanceGate::setMissionIdle(const bool mission_idle) {
+  if (mission_idle != mission_idle_) {
+    pristine_ = false;
+  }
   mission_idle_ = mission_idle;
 }
 
@@ -260,6 +283,26 @@ std::uint64_t MaintenanceGate::lastGeneration() const {
 
 std::size_t MaintenanceGate::pendingStatusCapacity() const {
   return kPendingStatusCapacity;
+}
+
+bool MaintenanceGate::restorePersistentStateImpl(
+    const std::uint64_t last_generation,
+    const std::uint64_t* const active_generation,
+    const bool mission_idle) {
+  const bool has_active_generation = active_generation != nullptr;
+  const bool invalid_active_generation = has_active_generation &&
+      (last_generation == 0u || *active_generation != last_generation);
+  if (!pristine_ || invalid_active_generation) {
+    return false;
+  }
+
+  pristine_ = false;
+  active_ = has_active_generation;
+  generation_ = active_ ? *active_generation : 0u;
+  last_generation_ = last_generation;
+  mission_idle_ = mission_idle;
+  resetEvidence();
+  return true;
 }
 
 bool MaintenanceGate::matches(

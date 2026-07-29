@@ -59,6 +59,13 @@ struct MaintenanceGateSnapshot {
 
 class MaintenanceGate {
  public:
+  bool restorePersistentState(
+      std::uint64_t last_generation,
+      bool mission_idle);
+  bool restorePersistentState(
+      std::uint64_t last_generation,
+      std::uint64_t active_generation,
+      bool mission_idle);
   bool request(std::uint64_t generation, bool mission_idle);
   bool release(std::uint64_t generation);
 
@@ -88,6 +95,10 @@ class MaintenanceGate {
 
   static constexpr std::size_t kPendingStatusCapacity = 16u;
 
+  bool restorePersistentStateImpl(
+      std::uint64_t last_generation,
+      const std::uint64_t* active_generation,
+      bool mission_idle);
   bool matches(
       std::uint64_t generation,
       std::uint64_t request_id,
@@ -104,6 +115,7 @@ class MaintenanceGate {
   void resetHardwareConfirmation();
   void resetHardwareEvidence();
 
+  bool pristine_{true};
   bool active_{false};
   std::uint64_t generation_{0u};
   std::uint64_t last_generation_{0u};

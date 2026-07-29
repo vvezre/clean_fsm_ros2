@@ -15,6 +15,7 @@ find_package(nlohmann_json REQUIRED)
 
 add_library(mission_core
   src/maintenance_gate.cpp
+  src/maintenance_store.cpp
   src/mission_state_machine.cpp
   src/straight_edge_guard.cpp
   src/mission_checkpoint.cpp
@@ -52,6 +53,15 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_maintenance_gate test/test_maintenance_gate.cpp)
   target_link_libraries(test_maintenance_gate mission_core)
+  ament_add_gtest(
+    test_maintenance_store
+    test/test_maintenance_store.cpp
+  )
+  target_link_libraries(
+    test_maintenance_store
+    mission_core
+    nlohmann_json::nlohmann_json
+  )
   ament_add_gtest(test_mission_state_machine test/test_mission_state_machine.cpp)
   target_link_libraries(test_mission_state_machine mission_core)
   ament_add_gtest(test_mission_checkpoint test/test_mission_checkpoint.cpp)
