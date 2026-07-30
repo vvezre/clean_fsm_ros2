@@ -135,6 +135,38 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertIn("cleanbot-updater", rollback)
         self.assertIn("rollback", rollback)
 
+    def test_install_bootstraps_maintenance_store_before_activation(self):
+        mission_cmake = self.read("src/cleanbot_mission/CMakeLists.txt")
+        initializer = self.read(
+            "src/cleanbot_mission/src/maintenance_store_init.cpp"
+        )
+        install = self.read("deployment/install/install.sh")
+
+        self.assertIn(
+            "add_executable(maintenance_store_init "
+            "src/maintenance_store_init.cpp)",
+            mission_cmake,
+        )
+        self.assertIn(
+            "install(TARGETS mission_core mission_manager_node "
+            "maintenance_store_init",
+            mission_cmake,
+        )
+        self.assertIn("MaintenanceStore store(argv[1]);", initializer)
+        self.assertIn("store.initializeGenesis()", initializer)
+
+        init_command = (
+            'runuser -u cleanbot -- "${maintenance_initializer}" '
+            '"/var/lib/cleanbot/runtime/maintenance.lock"'
+        )
+        self.assertIn(init_command, install)
+        self.assertLess(
+            install.index(init_command),
+            install.index(
+                'mv -Tf -- "${temporary_link}" /opt/cleanbot/current'
+            ),
+        )
+
     def test_arm64_release_workflow_builds_tests_signs_and_publishes(self):
         workflow = self.read(".github/workflows/arm64-release.yml")
 
