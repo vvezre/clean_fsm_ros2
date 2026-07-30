@@ -208,6 +208,28 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertNotIn("pull_request:", workflow)
         self.assertNotIn("push:", workflow)
 
+    def test_arm64_release_adds_ros_repository_before_ros_build_tools(self):
+        workflow = self.read(".github/workflows/arm64-release.yml")
+        bootstrap_install = (
+            "sudo apt-get install -y curl gnupg lsb-release"
+        )
+        repository_write = (
+            "| sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null"
+        )
+        ros_install = (
+            "sudo apt-get install -y ros-humble-ros-base "
+            "python3-colcon-common-extensions python3-rosdep"
+        )
+
+        self.assertIn(bootstrap_install, workflow)
+        self.assertIn(repository_write, workflow)
+        self.assertIn(ros_install, workflow)
+        repository_index = workflow.index(repository_write)
+        refreshed_index = workflow.index("sudo apt-get update", repository_index)
+        self.assertLess(workflow.index(bootstrap_install), repository_index)
+        self.assertLess(repository_index, refreshed_index)
+        self.assertLess(refreshed_index, workflow.index(ros_install))
+
     def test_release_builder_creates_reproducible_archive_and_canonical_manifest(self):
         builder_path = (
             DEPLOYMENT / "release" / "build_release_assets.py"
