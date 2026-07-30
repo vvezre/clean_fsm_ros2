@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "repository": "vvezre/clean_fsm_ros2",
+  "stagingRoot": "/var/lib/cleanbot/update/staging",
+  "releasesRoot": "/opt/cleanbot/releases",
+  "currentLink": "/opt/cleanbot/current",
+  "statePath": "/var/lib/cleanbot/update/state.json",
+  "publicKey": "/etc/cleanbot/update-public.pem",
+  "serviceName": "cleanbot.service",
+  "requester": "cleanbot-updater",
+  "autoDownload": true,
+  "autoApply": false
+}

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /opt/ros/humble/setup.bash
+source /opt/cleanbot/current/install/setup.bash
+
+export ROS_LOG_DIR=/var/log/cleanbot/ros
+exec ros2 launch cleanbot_bringup cleanbot.launch.py

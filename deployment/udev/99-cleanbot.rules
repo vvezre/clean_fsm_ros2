@@ -1,0 +1,4 @@
+# Replace both serial placeholders with the actual ID_SERIAL_SHORT values before
+# installing these rules. As shipped, these rules intentionally match no device.
+SUBSYSTEM=="tty", ATTRS{serial}=="REPLACE_LOWER_MACHINE_SERIAL", GROUP="dialout", MODE="0660", SYMLINK+="cleanbot/lower-machine"
+SUBSYSTEM=="tty", ATTRS{serial}=="REPLACE_RTK_SERIAL", GROUP="dialout", MODE="0660", SYMLINK+="cleanbot/rtk"

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /opt/ros/humble/setup.bash
+source /opt/cleanbot/current/install/setup.bash
+
+export ROS_HOME=/var/lib/cleanbot/runtime/updater-ros-home
+export ROS_LOG_DIR=/var/lib/cleanbot/runtime/updater-ros-log
+export ROS2CLI_NO_DAEMON=1
+exec ros2 "$@"

@@ -1,0 +1,11 @@
+/var/log/cleanbot/ros/*.log /var/log/cleanbot/ros/*/*.log {
+    daily
+    rotate 14
+    size 20M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su cleanbot cleanbot
+}

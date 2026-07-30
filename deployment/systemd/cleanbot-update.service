@@ -1,0 +1,20 @@
+[Unit]
+Description=Check and safely apply a Cleanbot release
+Wants=network-online.target
+After=network-online.target cleanbot.service
+
+[Service]
+Type=oneshot
+Environment=ROS_HOME=/var/lib/cleanbot/runtime/updater-ros-home
+Environment=ROS_LOG_DIR=/var/lib/cleanbot/runtime/updater-ros-log
+Environment=ROS2CLI_NO_DAEMON=1
+ExecStart=/usr/local/sbin/cleanbot-updater --config /etc/cleanbot/updater.json auto
+TimeoutStartSec=30min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/cleanbot /var/lib/cleanbot/update /var/lib/cleanbot/runtime/updater-ros-home /var/lib/cleanbot/runtime/updater-ros-log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+[Unit]
+Description=Cleanbot ROS2 runtime
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=cleanbot
+Group=cleanbot
+SupplementaryGroups=dialout
+Environment=ROS_DOMAIN_ID=0
+Environment=ROS_LOG_DIR=/var/log/cleanbot/ros
+ExecStart=/usr/local/libexec/cleanbot-start
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cleanbot /var/log/cleanbot/ros /run/cleanbot
+RuntimeDirectory=cleanbot
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,208 @@
+name: ARM64 stable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Stable release tag, for example v1.2.3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install ROS2 Humble build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg lsb-release python3-colcon-common-extensions python3-rosdep
+          sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+            -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo "$UBUNTU_CODENAME") main" \
+            | sudo tee /etc/apt/sources.list.d/ros2.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y ros-humble-ros-base
+          sudo rosdep init || true
+          rosdep update
+          rosdep install --from-paths src --ignore-src --rosdistro humble -r -y
+
+      - name: Build and test ARM64 workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest tests.test_deployment_files tests.test_deployment_updater -q
+          source /opt/ros/humble/setup.bash
+          colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose
+
+      - name: Package unsigned release
+        shell: bash
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          python3 deployment/release/build_release_assets.py \
+            --release "${RELEASE}" --install install --output dist
+
+      - name: Upload unsigned release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cleanbot-unsigned-release
+          path: |
+            dist/cleanbot-ros2-humble-arm64.tar.gz
+            dist/manifest.json
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-publish:
+    needs: build-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 15
+    environment: cleanbot-release
+    permissions:
+      contents: write
+    steps:
+      - name: Download unsigned release
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: cleanbot-unsigned-release
+          path: dist
+
+      - name: Validate unsigned assets without executing repository code
+        shell: bash
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          python3 - "${RELEASE}" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import sys
+          import tarfile
+
+          release = sys.argv[1]
+          if not re.fullmatch(
+              r"v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)",
+              release,
+          ):
+              raise SystemExit("unsafe release input")
+          root = pathlib.Path("dist")
+          manifest_path = root / "manifest.json"
+          archive_path = root / "cleanbot-ros2-humble-arm64.tar.gz"
+          data = manifest_path.read_bytes()
+          if not data or len(data) > 65536:
+              raise SystemExit("manifest size is invalid")
+          value = json.loads(data.decode("utf-8"))
+          canonical = (
+              json.dumps(
+                  value,
+                  ensure_ascii=False,
+                  allow_nan=False,
+                  sort_keys=True,
+                  separators=(",", ":"),
+              ).encode("utf-8")
+              + b"\n"
+          )
+          if data != canonical:
+              raise SystemExit("manifest is not canonical")
+          if value.get("release") != release:
+              raise SystemExit("release input and manifest differ")
+          if value.get("target") != {
+              "architecture": "arm64",
+              "os": "ubuntu-22.04",
+              "ros": "humble",
+          }:
+              raise SystemExit("release target is invalid")
+          archive = value.get("archive", {})
+          if archive.get("name") != archive_path.name:
+              raise SystemExit("archive name is invalid")
+          if archive_path.stat().st_size != archive.get("size"):
+              raise SystemExit("archive size differs from manifest")
+          digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+          if digest != archive.get("sha256"):
+              raise SystemExit("archive hash differs from manifest")
+          with tarfile.open(archive_path, "r:gz") as package:
+              members = package.getmembers()
+              if not members or len(members) > 100000:
+                  raise SystemExit("archive entry count is invalid")
+              names = set()
+              for member in members:
+                  path = pathlib.PurePosixPath(member.name)
+                  if (
+                      path.is_absolute()
+                      or ".." in path.parts
+                      or "\\" in member.name
+                      or member.name in names
+                      or not (member.isfile() or member.isdir())
+                  ):
+                      raise SystemExit("archive contains an unsafe entry")
+                  names.add(member.name)
+              if "VERSION" not in names or "install/setup.bash" not in names:
+                  raise SystemExit("archive runtime entry is missing")
+              if package.extractfile("VERSION").read() != (release + "\n").encode():
+                  raise SystemExit("archive VERSION differs from release")
+          PY
+
+      - name: Refuse an existing tag or release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE}" >/dev/null 2>&1; then
+            echo "release already exists: ${RELEASE}" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "refs/tags/${RELEASE}" >/dev/null 2>&1; then
+            echo "tag already exists: ${RELEASE}" >&2
+            exit 1
+          fi
+
+      - name: Sign validated manifest
+        shell: bash
+        env:
+          CLEANBOT_RELEASE_SIGNING_KEY_B64: ${{ secrets.CLEANBOT_RELEASE_SIGNING_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          signing_key=$(mktemp)
+          trap 'rm -f "${signing_key}"' EXIT
+          printf '%s' "${CLEANBOT_RELEASE_SIGNING_KEY_B64}" | base64 --decode > "${signing_key}"
+          chmod 0600 "${signing_key}"
+          openssl pkeyutl -sign -rawin -inkey "${signing_key}" \
+            -in dist/manifest.json -out dist/manifest.json.sig
+
+      - name: Publish stable GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          gh release create "${RELEASE}" \
+            dist/cleanbot-ros2-humble-arm64.tar.gz \
+            dist/manifest.json \
+            dist/manifest.json.sig \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE}" \
+            --notes "Cleanbot ROS2 Humble ARM64 stable release ${RELEASE}"

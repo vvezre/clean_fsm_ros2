@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically check for a stable Cleanbot release
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=5min
+Persistent=true
+Unit=cleanbot-update.service
+
+[Install]
+WantedBy=timers.target

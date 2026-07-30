@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec /usr/bin/flock --exclusive --nonblock \
+  /run/lock/cleanbot-updater.lock \
+  /usr/bin/python3 /usr/local/lib/cleanbot/cleanbot_updater.py "$@"
