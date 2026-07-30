@@ -49,7 +49,10 @@ ament_target_dependencies(
 )
 target_link_libraries(mission_manager_node nlohmann_json::nlohmann_json)
 
-install(TARGETS mission_core mission_manager_node
+add_executable(maintenance_store_init src/maintenance_store_init.cpp)
+target_link_libraries(maintenance_store_init mission_core)
+
+install(TARGETS mission_core mission_manager_node maintenance_store_init
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

@@ -82,6 +82,13 @@ if [[ ${reuse_release} == false ]]; then
   temporary_release=""
 fi
 
+maintenance_initializer="${release_target}/install/cleanbot_mission/lib/cleanbot_mission/maintenance_store_init"
+if [[ ! -x ${maintenance_initializer} ]]; then
+  echo "maintenance store initializer is missing from release" >&2
+  exit 1
+fi
+runuser -u cleanbot -- "${maintenance_initializer}" "/var/lib/cleanbot/runtime/maintenance.lock"
+
 install -m 0755 "${deployment_root}/bin/cleanbot-start" \
   /usr/local/libexec/cleanbot-start
 install -m 0755 "${deployment_root}/bin/cleanbot-updater" \
