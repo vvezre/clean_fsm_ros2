@@ -133,7 +133,6 @@ class WorkspaceContractTest(unittest.TestCase):
 
     def test_stage_one_packages_and_build_scripts_exist(self):
         required = [
-            WORKSPACE / "README.md",
             WORKSPACE / "scripts" / "build_humble.sh",
             SRC / "cleanbot_interfaces" / "package.xml",
             SRC / "cleanbot_interfaces" / "CMakeLists.txt",

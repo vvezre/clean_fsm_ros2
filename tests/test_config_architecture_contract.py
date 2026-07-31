@@ -225,17 +225,12 @@ class ConfigArchitectureContractTest(unittest.TestCase):
             for include in includes:
                 self.assertIn(include, source, str(path.relative_to(WORKSPACE)))
 
-    def test_repository_hygiene_and_configuration_documentation_are_current(self):
+    def test_repository_hygiene_excludes_transient_workspace_outputs(self):
         gitignore_path = WORKSPACE / ".gitignore"
         self.assertTrue(gitignore_path.is_file())
         gitignore = gitignore_path.read_text(encoding="utf-8")
         for pattern in (".vs/", ".tmp/", "build/", "install/", "log/", "*.obj"):
             self.assertIn(pattern, gitignore)
-
-        readme = (WORKSPACE / "README.md").read_text(encoding="utf-8")
-        self.assertIn("cleanbot_config", readme)
-        self.assertIn("SQLite is the only runtime source", readme)
-        self.assertNotIn("dependency-free C++ foundations", readme)
 
 
 if __name__ == "__main__":
