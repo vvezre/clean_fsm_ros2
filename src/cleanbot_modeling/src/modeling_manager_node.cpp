@@ -278,6 +278,7 @@ class ModelingManagerNode final : public rclcpp::Node {
         "-" + std::to_string(sequence);
   }
 
+  // 读取建模参数并打开数据库；数据库不可用时直接关闭配置就绪态。
   void configure(
       const config::ConfigSnapshot& snapshot,
       const bool initial) {
@@ -420,6 +421,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     response->message = message;
   }
 
+  // 建模对象管理入口：创建、加载、删除、分组、识别和版本保存都走这里。
   void onManage(
       const std::shared_ptr<ManageCleaningModel::Request> request,
       std::shared_ptr<ManageCleaningModel::Response> response) {
@@ -644,6 +646,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     response->model = toRosModel(model);
   }
 
+  // 等待一组新的 RTK 采样，生成稳定点位后写回草稿模型。
   void onSamplePoint(
       const std::shared_ptr<SampleModelPoint::Request> request,
       std::shared_ptr<SampleModelPoint::Response> response) {
@@ -736,6 +739,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     response->point = toRosPoint(sampled.point);
   }
 
+  // 基于已确认的模型版本生成覆盖路径，并持久化成可执行计划。
   void onGeneratePlan(
       const std::shared_ptr<GenerateCleaningPlan::Request> request,
       std::shared_ptr<GenerateCleaningPlan::Response> response) {
@@ -802,6 +806,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     response->plan = toRosPlan(plan);
   }
 
+  // 把已确认的计划转成任务动作并交给任务节点执行。
   void onExecutePlan(
       const std::shared_ptr<ExecuteModelPlan::Request> request,
       std::shared_ptr<ExecuteModelPlan::Response> response) {

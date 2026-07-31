@@ -577,6 +577,7 @@ class LowerMachineNode : public rclcpp::Node {
             std::chrono::steady_clock::now().time_since_epoch()).count());
   }
 
+  // 读取串口和协议参数，构建命令生命周期管理器并启动串口线程。
   void configure(const config::ConfigSnapshot& snapshot, const bool initial) {
     if (!initial && configured_) {
       RCLCPP_WARN(

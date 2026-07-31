@@ -102,6 +102,7 @@ class CommandArbiterNode : public rclcpp::Node {
   }
 
   // 更新某一来源的候选命令；优先级由本节点按来源重新赋值，防止上游伪造高优先级。
+  // 接收某一来源的候选命令，只更新该来源的状态，不直接向下位机发包。
   void onCommand(const CommandSource source, const VehicleCommand& message) {
     if (!configured_ || !arbiter_) {
       publishIfChanged();
@@ -115,6 +116,7 @@ class CommandArbiterNode : public rclcpp::Node {
   }
 
   // 更新独立滚刷状态。急停发生后核心仲裁器会强制清零滚刷，需要用户重新发送开启命令。
+  // 滚刷命令独立于车体仲裁，单独维护，避免被运动命令挤掉。
   void onBrush(const cleanbot_interfaces::msg::BrushCommand::SharedPtr message) {
     if (!configured_ || !arbiter_) {
       publishIfChanged();
@@ -124,6 +126,7 @@ class CommandArbiterNode : public rclcpp::Node {
     publishIfChanged();
   }
 
+  // 维护门状态由专门主题驱动；一旦打开，会强制影响后续输出优先级。
   void onMaintenanceState(
       const MaintenanceState::SharedPtr message,
       const rclcpp::MessageInfo& message_info) {
@@ -177,6 +180,7 @@ class CommandArbiterNode : public rclcpp::Node {
   }
 
   // 计算当前仲裁结果；只有输出内容变化时才发布，避免无意义地重复占用下位机串口。
+  // 把仲裁结果统一成最终命令，仅在内容变化时发布，减少下位机重复负担。
   void publishIfChanged() {
     ControlCommand output;
     if (!configured_ || !arbiter_) {
@@ -199,6 +203,7 @@ class CommandArbiterNode : public rclcpp::Node {
     final_publisher_->publish(message);
   }
 
+  // 读取租约时长并初始化仲裁核心；配置刷新后立即生效的是保存态，不是规则本身。
   void configure(const config::ConfigSnapshot& snapshot, const bool initial) {
     if (!initial && arbiter_) {
       RCLCPP_WARN(
@@ -222,6 +227,7 @@ class CommandArbiterNode : public rclcpp::Node {
   }
 
   // ROS2消息转换为不依赖ROS2的核心结构，便于仲裁算法独立单元测试。
+  // 将 ROS2 消息搬到纯数据结构，便于仲裁逻辑独立测试和复用。
   static ControlCommand toCore(const VehicleCommand& message) {
     ControlCommand command;
     command.stamp_ms = stampMs(message.stamp);
@@ -247,6 +253,7 @@ class CommandArbiterNode : public rclcpp::Node {
   }
 
   // 核心仲裁结果转换回ROS2消息，由本节点补充输出时间戳和新的最终command_id。
+  // 把仲裁结果再装回 ROS2 消息，统一补齐最终输出字段。
   static VehicleCommand toMessage(const ControlCommand& command) {
     VehicleCommand message;
     message.request_id = command.request_id;
@@ -267,6 +274,7 @@ class CommandArbiterNode : public rclcpp::Node {
     return message;
   }
 
+  // 固定优先级顺序：急停 > 安全 > 手动 > 任务 > 视觉。
   // 固定优先级顺序：急停 > 安全 > 手动 > 任务 > 视觉。
   static std::uint8_t fixedPriority(const CommandSource source) {
     if (source == CommandSource::kEmergency) {

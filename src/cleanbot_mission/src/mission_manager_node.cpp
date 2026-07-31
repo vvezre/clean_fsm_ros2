@@ -256,6 +256,7 @@ class MissionManagerNode : public rclcpp::Node {
     kFailed,
   };
 
+  // 清扫任务入口：先做维护门和配置门检查，再决定是否接受新的清扫 Action。
   rclcpp_action::GoalResponse onGoal(
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const ExecuteCleaning::Goal> goal) {
@@ -281,6 +282,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
+  // 接受清扫任务后重置运行态，并在线程里开始实际执行。
   void onAccepted(const std::shared_ptr<GoalHandle> goal_handle) {
     if (worker_.joinable()) {
       worker_.join();
@@ -309,6 +311,7 @@ class MissionManagerNode : public rclcpp::Node {
     worker_ = std::thread(&MissionManagerNode::execute, this, goal_handle);
   }
 
+  // 多路点任务入口：校验循环参数、坐标合法性和当前运行态。
   rclcpp_action::GoalResponse onWaypointGoal(
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const NavigateWaypoints::Goal> goal) {
@@ -347,6 +350,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
+  // 接受多路点任务后初始化统计信息，并进入独立执行线程。
   void onWaypointAccepted(
       const std::shared_ptr<WaypointGoalHandle> goal_handle) {
     if (worker_.joinable()) {
@@ -384,6 +388,7 @@ class MissionManagerNode : public rclcpp::Node {
         &MissionManagerNode::executeWaypoints, this, goal_handle);
   }
 
+  // 返航任务入口：只接受可用坐标和当前空闲状态下的请求。
   rclcpp_action::GoalResponse onReturnHomeGoal(
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const ReturnHome::Goal> goal) {
@@ -410,6 +415,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
+  // 接受返航任务后启动返航执行线程。
   void onReturnHomeAccepted(
       const std::shared_ptr<ReturnHomeGoalHandle> goal_handle) {
     if (worker_.joinable()) {
@@ -439,6 +445,7 @@ class MissionManagerNode : public rclcpp::Node {
         &MissionManagerNode::executeReturnHome, this, goal_handle);
   }
 
+  // 断点恢复入口：先读取检查点，再决定恢复的是清扫还是返航任务。
   rclcpp_action::GoalResponse onRecoverGoal(
       const rclcpp_action::GoalUUID&,
       const std::shared_ptr<const RecoverMission::Goal> goal) {
@@ -483,6 +490,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
+  // 接受恢复任务后启动恢复执行线程。
   void onRecoverAccepted(
       const std::shared_ptr<RecoverGoalHandle> goal_handle) {
     if (worker_.joinable()) {
@@ -512,6 +520,7 @@ class MissionManagerNode : public rclcpp::Node {
         &MissionManagerNode::executeRecoverMission, this, goal_handle);
   }
 
+  // 外部暂停/继续服务：只改运行态，不直接改底层指令。
   void onSetPause(
       const std::shared_ptr<cleanbot_interfaces::srv::SetMissionPause::Request> request,
       std::shared_ptr<cleanbot_interfaces::srv::SetMissionPause::Response> response) {
@@ -613,6 +622,7 @@ class MissionManagerNode : public rclcpp::Node {
     condition_.notify_all();
   }
 
+  // 订阅下位机状态，用于判断硬件是否可用、是否需要暂停或报故障。
   void onHardwareStatus(
       const cleanbot_interfaces::msg::HardwareStatus::SharedPtr hardware,
       const rclcpp::MessageInfo& info) {
@@ -660,6 +670,7 @@ class MissionManagerNode : public rclcpp::Node {
     condition_.notify_all();
   }
 
+  // 订阅路径跟踪状态，驱动任务段结束、暂停和恢复判断。
   void onTrackingStatus(const TrackingStatus::SharedPtr tracking) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (mission_active_ &&
@@ -670,6 +681,7 @@ class MissionManagerNode : public rclcpp::Node {
     }
   }
 
+  // 订阅命令执行结果，更新当前任务是否已经被下位机确认、完成或超时。
   void onCommandStatus(const CommandExecutionStatus::SharedPtr status) {
     CommandStatusEvidence evidence;
     evidence.generation = status->request_id;
@@ -687,6 +699,7 @@ class MissionManagerNode : public rclcpp::Node {
     }
   }
 
+  // 最终控制命令回调：把仲裁后的唯一输出折算成任务状态机可用的运行态。
   void onFinalCommand(const VehicleCommand::SharedPtr command) {
     FinalCommandEvidence evidence;
     evidence.generation = command->request_id;
@@ -717,6 +730,7 @@ class MissionManagerNode : public rclcpp::Node {
     }
   }
 
+  // 清扫主执行循环：逐段发布目标、刷滚刷、跟踪、检查暂停和异常。
   void execute(const std::shared_ptr<GoalHandle> goal_handle) {
     const auto goal = *goal_handle->get_goal();
     auto result = std::make_shared<ExecuteCleaning::Result>();
@@ -861,6 +875,7 @@ class MissionManagerNode : public rclcpp::Node {
     finishAction(goal_handle, machine, result, final_step, completed_segments);
   }
 
+  // 多路点主执行循环：逐个航点规划转入、跟踪并统计完成数。
   void executeWaypoints(
       const std::shared_ptr<WaypointGoalHandle> goal_handle) {
     const auto goal = *goal_handle->get_goal();
@@ -1099,6 +1114,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kCancelled;
   }
 
+  // 返航执行：从当前位置重新规划到返航点，必要时在到达后执行 docking。
   void executeReturnHome(
       const std::shared_ptr<ReturnHomeGoalHandle> goal_handle) {
     const auto goal = *goal_handle->get_goal();
@@ -1218,6 +1234,7 @@ class MissionManagerNode : public rclcpp::Node {
     finishReturnHomeAction(goal_handle, final_machine, result, final_step);
   }
 
+  // 恢复入口：根据检查点恢复清扫或返航任务，不直接复用断电前的旧轨迹。
   void executeRecoverMission(
       const std::shared_ptr<RecoverGoalHandle> goal_handle) {
     auto result = std::make_shared<RecoverMission::Result>();
@@ -1253,6 +1270,7 @@ class MissionManagerNode : public rclcpp::Node {
     executeRecoveredSegments(goal_handle, std::move(*checkpoint), result);
   }
 
+  // 恢复执行主循环：先重定位到未完成段起点，再按检查点继续后续段。
   void executeRecoveredSegments(
       const std::shared_ptr<RecoverGoalHandle> goal_handle,
       MissionCheckpointRecord checkpoint,
@@ -2126,6 +2144,7 @@ class MissionManagerNode : public rclcpp::Node {
     mission_command_publisher_->publish(command);
   }
 
+  // 向跟踪节点发布当前任务段目标线段。
   void publishTrackingTarget(
       const cleanbot_interfaces::msg::TaskSegment& segment,
       const std::uint64_t generation,
@@ -2148,6 +2167,7 @@ class MissionManagerNode : public rclcpp::Node {
     tracking_target_publisher_->publish(target);
   }
 
+  // 任务级制动：把任务层的停止语义下发给仲裁层。
   void publishMissionBrake(const std::string& source) {
     VehicleCommand command;
     command.stamp = now();
@@ -2174,6 +2194,7 @@ class MissionManagerNode : public rclcpp::Node {
     mission_command_publisher_->publish(command);
   }
 
+  // 安全制动：比任务制动更高优先级，用于故障、暂停和恢复前收口。
   void publishSafetyBrake(const std::string& source) {
     VehicleCommand command;
     command.stamp = now();
@@ -2200,6 +2221,7 @@ class MissionManagerNode : public rclcpp::Node {
     safety_command_publisher_->publish(command);
   }
 
+  // 根据任务段类型和滚刷速度发布滚刷命令；清扫段开启，转移段关闭。
   void publishBrushForSegment(
       const cleanbot_interfaces::msg::TaskSegment& segment,
       const std::int32_t requested_speed) {
@@ -2527,6 +2549,7 @@ class MissionManagerNode : public rclcpp::Node {
     return nullptr;
   }
 
+  // 选择用于恢复的检查点：优先返航，其次清扫；run_id 指定时精确匹配。
   std::optional<MissionCheckpointRecord> loadRecoveryCheckpoint(
       const std::string& requested_run_id,
       std::string* error) const {
@@ -2565,6 +2588,7 @@ class MissionManagerNode : public rclcpp::Node {
     return std::nullopt;
   }
 
+  // 原子保存检查点，并把最新状态写回给调用方，便于外部观测恢复进度。
   bool saveCheckpoint(MissionCheckpointRecord& checkpoint, const std::string& state) {
     checkpoint.state = state;
     const auto now_ms = wallClockMilliseconds();
@@ -2589,6 +2613,7 @@ class MissionManagerNode : public rclcpp::Node {
     return true;
   }
 
+  // 任务真正完成或取消后清理对应检查点，避免下次恢复误命中旧任务。
   void clearCheckpoint(const std::string& mission_kind, const std::string& source) {
     auto* store = checkpointStoreForKind(mission_kind);
     if (store == nullptr) {

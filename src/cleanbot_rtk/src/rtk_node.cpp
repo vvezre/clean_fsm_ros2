@@ -270,11 +270,13 @@ class RtkNode : public rclcpp::Node {
     publishFreshness();
   }
 
+  // 返回单调时钟秒数，用于计算NMEA/RTCM数据年龄，避免受系统时间校准影响。
   static double monotonicSeconds() {
     return std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
   }
 
+  // 读取RTK/NTRIP配置，并启动串口、同步器和差分客户端。
   void configure(const config::ConfigSnapshot& snapshot, const bool initial) {
     if (!initial && configured_) {
       RCLCPP_WARN(

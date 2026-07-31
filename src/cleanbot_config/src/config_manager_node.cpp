@@ -85,6 +85,7 @@ class ConfigManagerNode : public rclcpp::Node {
   }
 
  private:
+  // 汇总当前内存配置，检查必填项和取值合法性，并把节点状态切到 READY/ERROR。
   void evaluate_configuration() {
     missing_required_keys_ = registry_.missing_required(values_);
     for (const auto& item : registry_.definitions()) {
@@ -117,6 +118,7 @@ class ConfigManagerNode : public rclcpp::Node {
     error_message_.clear();
   }
 
+  // 读取配置的只读入口：支持按 key 查询，也支持一次性返回全部非敏感项。
   void on_get(
       const std::shared_ptr<cleanbot_interfaces::srv::GetConfig::Request> request,
       std::shared_ptr<cleanbot_interfaces::srv::GetConfig::Response> response) {
@@ -151,6 +153,7 @@ class ConfigManagerNode : public rclcpp::Node {
     response->revision = repository_status_.revision;
   }
 
+  // 写入配置的服务入口：先做重复 key 和仓库健康检查，再原子写入并刷新缓存。
   void on_set(
       const std::shared_ptr<cleanbot_interfaces::srv::SetConfig::Request> request,
       std::shared_ptr<cleanbot_interfaces::srv::SetConfig::Response> response) {
@@ -201,6 +204,7 @@ class ConfigManagerNode : public rclcpp::Node {
     publish_status();
   }
 
+  // 周期性发布配置就绪状态，给下游节点和界面做启动门控与故障展示。
   void publish_status() {
     cleanbot_interfaces::msg::ConfigStatus status;
     status.stamp = now();

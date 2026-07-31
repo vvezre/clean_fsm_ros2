@@ -106,6 +106,7 @@ class HttpGatewayNode : public rclcpp::Node {
   using WorkGuard =
       asio::executor_work_guard<asio::io_context::executor_type>;
 
+  // 读取 HTTP 和手动控制参数；首次配置决定是否启动服务端。
   void configure(const config::ConfigSnapshot& snapshot, const bool initial) {
     cleanbot::control::JoystickParameters parameters;
     parameters.max_linear_speed = static_cast<std::int32_t>(
@@ -144,6 +145,7 @@ class HttpGatewayNode : public rclcpp::Node {
         static_cast<std::uint16_t>(snapshot.get_integer("http.port")));
   }
 
+  // 手动控制接口：先做边界校验，再把合格请求转成 ROS2 手动命令。
   void onManualControl(
       const std::shared_ptr<cleanbot_interfaces::srv::ManualControl::Request> request,
       std::shared_ptr<cleanbot_interfaces::srv::ManualControl::Response> response) {
@@ -170,6 +172,7 @@ class HttpGatewayNode : public rclcpp::Node {
     }
   }
 
+  // 急停接口：只接受紧急语义，成功后直接发急停命令。
   void onEmergencyStop(
       const std::shared_ptr<cleanbot_interfaces::srv::EmergencyStop::Request> request,
       std::shared_ptr<cleanbot_interfaces::srv::EmergencyStop::Response> response) {
@@ -184,6 +187,7 @@ class HttpGatewayNode : public rclcpp::Node {
     }
   }
 
+  // 给 HTTP 请求补齐 ROS2 侧字段，并按优先级发布到对应控制主题。
   void publishUserControl(
       const UserControlCommand& input,
       const std::uint8_t priority) {
@@ -206,6 +210,7 @@ class HttpGatewayNode : public rclcpp::Node {
     }
   }
 
+  // 启动异步 HTTP 服务线程；监听失败就让节点初始化失败，避免半可用状态。
   void startServer(const std::string& address, const std::uint16_t port) {
     if (server_thread_.joinable()) {
       RCLCPP_WARN(get_logger(), "HTTP control gateway is already running");
@@ -251,6 +256,7 @@ class HttpGatewayNode : public rclcpp::Node {
         static_cast<unsigned int>(server_->port()));
   }
 
+  // 关闭 acceptor 和 io_context，并等待线程退出，确保析构时没有悬挂回调。
   void stopServer() {
     if (server_) {
       try {
@@ -271,6 +277,7 @@ class HttpGatewayNode : public rclcpp::Node {
     server_.reset();
   }
 
+  // 路由层：先做 HTTP 业务判定，再决定是返回 JSON、转 ROS2 Service，还是发控制命令。
   HttpControlResult handleRequest(
       const std::string& method,
       const std::string& target) {
@@ -327,6 +334,7 @@ class HttpGatewayNode : public rclcpp::Node {
         decision.message);
   }
 
+  // 直接把最近一次车辆状态转成 JSON 返回给前端。
   HttpControlResult vehicleStateResponse() {
     cleanbot_interfaces::msg::VehicleState state;
     {
@@ -365,6 +373,7 @@ class HttpGatewayNode : public rclcpp::Node {
     return result;
   }
 
+  // 暂停/恢复走 ROS2 Service，同步等待结果并映射成 HTTP 响应。
   HttpControlResult missionPauseResponse(const bool pause) {
     if (!mission_pause_client_->wait_for_service(
             std::chrono::seconds(0))) {
@@ -393,6 +402,7 @@ class HttpGatewayNode : public rclcpp::Node {
         DownstreamResponseState::kResponded, downstream));
   }
 
+  // 执行计划请求先打到建模节点的 Service，再把返回结果映射成 HTTP 响应。
   HttpControlResult executePlanResponse(
       const std::string& plan_id,
       const std::int32_t brush_speed) {
@@ -424,6 +434,7 @@ class HttpGatewayNode : public rclcpp::Node {
         DownstreamResponseState::kResponded, downstream));
   }
 
+  // 旧版控制路径：把 HTTP 结果翻译成最终控制主题，兼容现有前端请求。
   void publishControl(const HttpControlResult& result) {
     if (result.action != HttpControlAction::kManual &&
         result.action != HttpControlAction::kEmergencyStop) {
