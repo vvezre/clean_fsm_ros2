@@ -1,3 +1,7 @@
+/*
+ * 文件作用：SQLite配置仓库实现：负责配置项的读取、写入和事务边界。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_config/sqlite_config_repository.hpp"
 
 #include <cstdlib>
@@ -19,6 +23,7 @@ namespace {
 
 constexpr std::uint32_t kSchemaVersion = 1u;
 
+// 将配置值类型枚举转换为数据库中保存的稳定文本。
 std::string value_type_name(const ConfigValueType type) {
   switch (type) {
     case ConfigValueType::kInteger:
@@ -33,14 +38,17 @@ std::string value_type_name(const ConfigValueType type) {
   }
 }
 
+// 将应用策略转换为数据库中保存的文本标识。
 std::string apply_policy_name(const ApplyPolicy policy) {
   return policy == ApplyPolicy::kImmediate ? "immediate" : "restart";
 }
 
+// 从 SQLite 连接提取最近错误；空连接返回明确说明。
 std::string sqlite_error(sqlite3* database) {
   return database == nullptr ? "database is not open" : sqlite3_errmsg(database);
 }
 
+// 构造统一的仓库失败状态，保留可诊断错误码和架构版本。
 RepositoryStatus repository_error(
     const std::string& code,
     const std::string& message,
@@ -52,6 +60,7 @@ RepositoryStatus repository_error(
   return status;
 }
 
+// 从数据库文件路径取出父目录，用于预检目录和磁盘空间。
 std::string parent_directory(const std::string& path) {
   const auto separator = path.find_last_of("/\\");
   if (separator == std::string::npos) {
@@ -64,6 +73,7 @@ std::string parent_directory(const std::string& path) {
 }
 
 #ifdef _WIN32
+// 将 UTF-8 路径转换为 Windows 文件 API 所需的宽字符路径。
 std::wstring utf8_to_wide(const std::string& value) {
   if (value.empty()) {
     return std::wstring();
@@ -83,6 +93,7 @@ std::wstring utf8_to_wide(const std::string& value) {
 }
 #endif
 
+// 跨平台判断数据库父目录是否存在且确为目录。
 bool directory_exists(const std::string& path) {
 #ifdef _WIN32
   const auto wide_path = utf8_to_wide(path);
@@ -98,6 +109,7 @@ bool directory_exists(const std::string& path) {
 #endif
 }
 
+// 查询文件系统可用空间，避免在低磁盘空间下写入配置库。
 bool available_space(
     const std::string& path,
     std::uint64_t& bytes,
@@ -129,16 +141,19 @@ bool available_space(
 
 }  // namespace
 
+// 保存数据库路径和最小剩余空间阈值。
 SqliteConfigRepository::SqliteConfigRepository(
     std::string database_path,
     const std::uint64_t minimum_free_space_bytes)
     : database_path_(std::move(database_path)),
       minimum_free_space_bytes_(minimum_free_space_bytes) {}
 
+// 析构时关闭 SQLite 连接并重置修订状态。
 SqliteConfigRepository::~SqliteConfigRepository() {
   close();
 }
 
+// 预检目录与空间，打开数据库并创建或校验当前架构。
 RepositoryStatus SqliteConfigRepository::open_and_initialize(
     const ConfigRegistry& registry) {
   close();
@@ -223,6 +238,7 @@ RepositoryStatus SqliteConfigRepository::open_and_initialize(
   return status;
 }
 
+// 读取数据库中的全部配置文本，连接不可用时返回空集合。
 std::map<std::string, std::string> SqliteConfigRepository::read_all() const {
   std::map<std::string, std::string> values;
   if (database_ == nullptr) {
@@ -246,6 +262,7 @@ std::map<std::string, std::string> SqliteConfigRepository::read_all() const {
   return values;
 }
 
+// 校验并在单个事务中写入变更键，同时递增配置修订号。
 WriteResult SqliteConfigRepository::write_values(
     const std::map<std::string, std::string>& values,
     const std::string& updated_by,
@@ -367,6 +384,7 @@ WriteResult SqliteConfigRepository::write_values(
   return result;
 }
 
+// 关闭数据库连接，并清除内存中的修订号。
 void SqliteConfigRepository::close() {
   if (database_ != nullptr) {
     sqlite3_close(database_);
@@ -375,6 +393,7 @@ void SqliteConfigRepository::close() {
   revision_ = 0u;
 }
 
+// 执行不返回结果集的 SQL 语句，并将 SQLite 错误写入 error。
 bool SqliteConfigRepository::execute(
     const std::string& sql,
     std::string& error) const {
@@ -389,6 +408,7 @@ bool SqliteConfigRepository::execute(
   return false;
 }
 
+// 创建配置表、元数据表和默认值；失败时回滚整个初始化事务。
 bool SqliteConfigRepository::create_schema(
     const ConfigRegistry& registry,
     std::string& error) {
@@ -422,6 +442,7 @@ bool SqliteConfigRepository::create_schema(
   return true;
 }
 
+// 将一条带默认值的注册表定义写入新建数据库。
 bool SqliteConfigRepository::insert_default(
     const ConfigDefinition& definition,
     std::string& error) {
@@ -449,6 +470,7 @@ bool SqliteConfigRepository::insert_default(
   return success;
 }
 
+// 读取并严格解析配置修订号元数据。
 bool SqliteConfigRepository::read_revision(
     std::uint64_t& revision,
     std::string& error) const {
@@ -484,6 +506,7 @@ bool SqliteConfigRepository::read_revision(
   return true;
 }
 
+// 调用 SQLite quick_check 检查数据库页和基本结构完整性。
 bool SqliteConfigRepository::quick_check(std::string& error) const {
   sqlite3_stmt* statement = nullptr;
   if (sqlite3_prepare_v2(

@@ -6,9 +6,11 @@
 #include "cleanbot_control/joystick_mapper.hpp"
 #include "cleanbot_http/joystick_sequence_guard.hpp"
 
+// 文件作用：声明 HTTP 路径到车辆控制动作的纯解析与路由接口。
 namespace cleanbot {
 namespace http {
 
+// HTTP 控制请求被识别后的业务动作类别。
 enum class HttpControlAction {
   kNone,
   kManual,
@@ -19,6 +21,7 @@ enum class HttpControlAction {
   kExecuteModelPlan,
 };
 
+// HTTP 路由结果，包括响应内容和需要交由 ROS 节点执行的动作。
 struct HttpControlResult {
   int status_code{500};
   std::string body;
@@ -38,9 +41,11 @@ class HttpControlRouter {
       const cleanbot::control::JoystickParameters& parameters =
           cleanbot::control::JoystickParameters());
 
+  // 热更新摇杆映射参数，供运行期配置变更调用。
   void updateParameters(
       const cleanbot::control::JoystickParameters& parameters);
 
+  // 解析 HTTP 方法与目标路径，生成业务响应和后续控制动作。
   HttpControlResult route(
       const std::string& method,
       const std::string& target) const;

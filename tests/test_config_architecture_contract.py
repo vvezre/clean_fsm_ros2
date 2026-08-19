@@ -1,3 +1,4 @@
+# 文件作用：验证 config architecture contract 相关契约、运行逻辑和边界条件。
 import unittest
 from pathlib import Path
 
@@ -7,6 +8,7 @@ SRC = WORKSPACE / "src"
 
 
 class ConfigArchitectureContractTest(unittest.TestCase):
+    # 测试作用：验证“config_manager_package_and_ros_interfaces_exist”场景的契约、输出结果和边界行为。
     def test_config_manager_package_and_ros_interfaces_exist(self):
         required = (
             SRC / "cleanbot_config" / "package.xml",
@@ -22,6 +24,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         missing = [str(path.relative_to(WORKSPACE)) for path in required if not path.is_file()]
         self.assertEqual(missing, [], "missing configuration architecture files: {}".format(missing))
 
+    # 测试作用：验证“config_interfaces_are_generated_and_legacy_speed_interface_is_retired”场景的契约、输出结果和边界行为。
     def test_config_interfaces_are_generated_and_legacy_speed_interface_is_retired(self):
         interfaces_root = SRC / "cleanbot_interfaces"
         cmake = (interfaces_root / "CMakeLists.txt").read_text(encoding="utf-8")
@@ -58,6 +61,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         ):
             self.assertIn(field, config_status)
 
+    # 测试作用：验证“common_package_owns_explicit_qos_profiles”场景的契约、输出结果和边界行为。
     def test_common_package_owns_explicit_qos_profiles(self):
         common_root = SRC / "cleanbot_common"
         header_path = common_root / "include" / "cleanbot_common" / "qos_profiles.hpp"
@@ -84,6 +88,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertIn("ament_export_dependencies(rclcpp)", cmake)
         self.assertIn("<depend>rclcpp</depend>", package)
 
+    # 测试作用：验证“config_manager_owns_storage_state_and_services”场景的契约、输出结果和边界行为。
     def test_config_manager_owns_storage_state_and_services(self):
         config_root = SRC / "cleanbot_config"
         source = (config_root / "src" / "config_manager_node.cpp").read_text(
@@ -112,6 +117,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertNotIn('declare_parameter<std::int64_t>("motion.base_forward_speed"', source)
         self.assertIn("repository_status_.writable = false", source)
 
+    # 测试作用：验证“config_client_is_the_only_business_node_configuration_api”场景的契约、输出结果和边界行为。
     def test_config_client_is_the_only_business_node_configuration_api(self):
         config_root = SRC / "cleanbot_config"
         header = config_root / "include" / "cleanbot_config" / "config_client.hpp"
@@ -135,6 +141,24 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertIn('"/config/changed"', source_text)
         self.assertIn('"/config/get"', source_text)
 
+    # 测试作用：验证“config_status_heartbeat_does_not_refetch_same_revision”场景的契约、输出结果和边界行为。
+    def test_config_status_heartbeat_does_not_refetch_same_revision(self):
+        config_root = SRC / "cleanbot_config"
+        header = (
+            config_root / "include" / "cleanbot_config" / "config_client.hpp"
+        ).read_text(encoding="utf-8")
+        source = (config_root / "src" / "config_client.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("status_ready_seen_", header)
+        self.assertIn("status_revision_", header)
+        self.assertIn(
+            "!status_ready_seen_ || message->revision != status_revision_",
+            source,
+        )
+        self.assertIn("status_ready_seen_ = false", source)
+
+    # 测试作用：验证“bringup_yaml_contains_only_database_bootstrap_configuration”场景的契约、输出结果和边界行为。
     def test_bringup_yaml_contains_only_database_bootstrap_configuration(self):
         bringup_root = SRC / "cleanbot_bringup"
         launch = (bringup_root / "launch" / "cleanbot.launch.py").read_text(
@@ -163,6 +187,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
             self.assertNotIn(forbidden, yaml)
         self.assertIn("<exec_depend>cleanbot_config</exec_depend>", package)
 
+    # 测试作用：验证“command_arbiter_waits_for_config_and_uses_shared_qos”场景的契约、输出结果和边界行为。
     def test_command_arbiter_waits_for_config_and_uses_shared_qos(self):
         source = (
             SRC / "cleanbot_control" / "src" / "command_arbiter_node.cpp"
@@ -173,6 +198,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertIn("common::latest_command_qos()", source)
         self.assertNotIn("declare_parameter", source)
 
+    # 测试作用：验证“tracking_uses_global_forward_speed_from_config”场景的契约、输出结果和边界行为。
     def test_tracking_uses_global_forward_speed_from_config(self):
         source = (
             SRC / "cleanbot_control" / "src" / "tracking_node.cpp"
@@ -185,6 +211,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertIn("common::debug_qos()", source)
         self.assertNotIn("declare_parameter", source)
 
+    # 测试作用：验证“hardware_and_rtk_do_not_open_serial_before_config_ready”场景的契约、输出结果和边界行为。
     def test_hardware_and_rtk_do_not_open_serial_before_config_ready(self):
         hardware = (
             SRC / "cleanbot_hardware" / "src" / "lower_machine_node.cpp"
@@ -202,6 +229,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertIn("common::command_status_qos()", hardware)
         self.assertIn("common::rtk_fix_qos()", rtk)
 
+    # 测试作用：验证“mission_rejects_tasks_until_configuration_is_ready”场景的契约、输出结果和边界行为。
     def test_mission_rejects_tasks_until_configuration_is_ready(self):
         source = (
             SRC / "cleanbot_mission" / "src" / "mission_manager_node.cpp"
@@ -214,6 +242,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
         self.assertIn("common::rtk_fix_qos()", source)
         self.assertNotIn("declare_parameter", source)
 
+    # 测试作用：验证“new_configuration_sources_include_their_direct_standard_dependencies”场景的契约、输出结果和边界行为。
     def test_new_configuration_sources_include_their_direct_standard_dependencies(self):
         expected = {
             SRC / "cleanbot_config/src/config_client.cpp": ("#include <chrono>", "#include <cctype>"),
@@ -225,6 +254,7 @@ class ConfigArchitectureContractTest(unittest.TestCase):
             for include in includes:
                 self.assertIn(include, source, str(path.relative_to(WORKSPACE)))
 
+    # 测试作用：验证“repository_hygiene_excludes_transient_workspace_outputs”场景的契约、输出结果和边界行为。
     def test_repository_hygiene_excludes_transient_workspace_outputs(self):
         gitignore_path = WORKSPACE / ".gitignore"
         self.assertTrue(gitignore_path.is_file())

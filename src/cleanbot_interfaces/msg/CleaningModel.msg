@@ -1,3 +1,4 @@
+# 文件作用：定义可编辑或已确认的完整清扫模型消息。
 string id
 string name
 uint64 version

@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <limits>
 
 #include "cleanbot_mission/vehicle_state_builder.hpp"
@@ -7,6 +8,7 @@
 using cleanbot::mission::VehicleStateInput;
 using cleanbot::mission::build_vehicle_state;
 
+// 测试目的：验证 VehicleStateBuilder.ReportsReadyIdleVehicle 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, ReportsReadyIdleVehicle) {
   VehicleStateInput input;
   input.configured = true;
@@ -28,6 +30,7 @@ TEST(VehicleStateBuilder, ReportsReadyIdleVehicle) {
   EXPECT_DOUBLE_EQ(state.battery_percent, 82.5);
 }
 
+// 测试目的：验证 VehicleStateBuilder.FaultOverridesPauseAndLifecycleMessages 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, FaultOverridesPauseAndLifecycleMessages) {
   VehicleStateInput input;
   input.configured = true;
@@ -49,6 +52,7 @@ TEST(VehicleStateBuilder, FaultOverridesPauseAndLifecycleMessages) {
   EXPECT_TRUE(state.cleaning);
 }
 
+// 测试目的：验证 VehicleStateBuilder.InactiveMissionDoesNotPublishStaleFault 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, InactiveMissionDoesNotPublishStaleFault) {
   VehicleStateInput input;
   input.configured = true;
@@ -67,6 +71,7 @@ TEST(VehicleStateBuilder, InactiveMissionDoesNotPublishStaleFault) {
   EXPECT_TRUE(state.start_ready);
 }
 
+// 测试目的：验证 VehicleStateBuilder.MapsFinalCommandPriorityAndUnknownBattery 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, MapsFinalCommandPriorityAndUnknownBattery) {
   VehicleStateInput input;
   input.configured = true;
@@ -83,6 +88,7 @@ TEST(VehicleStateBuilder, MapsFinalCommandPriorityAndUnknownBattery) {
   EXPECT_DOUBLE_EQ(state.battery_percent, -1.0);
 }
 
+// 测试目的：验证 VehicleStateBuilder.MapsAllArbitratedCommandPriorities 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, MapsAllArbitratedCommandPriorities) {
   VehicleStateInput input;
   input.configured = true;
@@ -100,6 +106,7 @@ TEST(VehicleStateBuilder, MapsAllArbitratedCommandPriorities) {
   EXPECT_EQ(build_vehicle_state(input).control_state, "vision");
 }
 
+// 测试目的：验证 VehicleStateBuilder.ReportsDegradedWhenRuntimeInputsAreNotReady 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, ReportsDegradedWhenRuntimeInputsAreNotReady) {
   VehicleStateInput input;
   input.configured = true;
@@ -115,6 +122,7 @@ TEST(VehicleStateBuilder, ReportsDegradedWhenRuntimeInputsAreNotReady) {
   EXPECT_EQ(state.message, "waiting for RTK");
 }
 
+// 测试目的：验证 VehicleStateBuilder.ExposesActiveMissionProgress 场景的行为、状态变化和边界条件。
 TEST(VehicleStateBuilder, ExposesActiveMissionProgress) {
   VehicleStateInput input;
   input.configured = true;

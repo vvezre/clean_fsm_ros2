@@ -68,6 +68,7 @@ class TrackingNode : public rclcpp::Node {
             "tracking.overshoot_cte_tolerance_m",
         },
         false,
+        // 配置回调作用：接收最新配置快照，并刷新本节点对应的运行参数。
         [this](const config::ConfigSnapshot& snapshot, const bool initial) {
           configure(snapshot, initial);
         });
@@ -250,6 +251,7 @@ class TrackingNode : public rclcpp::Node {
     debug_publisher_->publish(debug);
   }
 
+  // 发布当前跟踪代次、完成/阻塞状态、目标距离和业务说明。
   void publishStatus(
       const bool active,
       const bool finished,
@@ -271,6 +273,7 @@ class TrackingNode : public rclcpp::Node {
     status_publisher_->publish(status);
   }
 
+  // 从配置快照加载跟踪参数；运行期仅立即更新基础前进速度。
   void configure(const config::ConfigSnapshot& snapshot, const bool initial) {
     base_forward_speed_ = static_cast<std::int32_t>(
         snapshot.get_integer("motion.base_forward_speed"));
@@ -301,6 +304,7 @@ class TrackingNode : public rclcpp::Node {
         base_forward_speed_);
   }
 
+  // 返回用于滤波时间步长计算的单调秒计时。
   static double monotonicSeconds() {
     return std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count();

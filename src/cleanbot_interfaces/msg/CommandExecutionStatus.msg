@@ -1,3 +1,4 @@
+# 文件作用：定义下位机控制命令发送、回执和完成状态消息。
 uint8 STATE_UNKNOWN=0
 uint8 STATE_SENT=1
 uint8 STATE_ACKNOWLEDGED=2

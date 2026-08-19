@@ -1,3 +1,4 @@
+# 文件作用：HTTP 网关节点的 CMake 构建、安装与测试声明。
 cmake_minimum_required(VERSION 3.8)
 project(cleanbot_http)
 

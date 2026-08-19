@@ -1,3 +1,4 @@
+# 文件作用：验证 modeling coverage runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -30,6 +31,7 @@ SOURCES = (
 CORE_LOADED = False
 
 
+# 辅助方法：读取或加载 load_core 所需的测试数据并返回解析结果。
 def load_core(test_case):
     global CORE_LOADED
     for source in SOURCES:
@@ -49,6 +51,7 @@ def load_core(test_case):
     CORE_LOADED = True
 
 
+# 辅助方法：为 polygon 测试场景准备输入、执行操作或整理结果。
 def polygon(points):
     point_type = cppyy.gbl.cleanbot.modeling.Point2d
     values = cppyy.gbl.std.vector[point_type]()
@@ -61,10 +64,12 @@ def polygon(points):
 
 
 class ModelingCoverageRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         load_core(self)
         self.api = cppyy.gbl.cleanbot.modeling
 
+    # 测试作用：验证“odd_natural_count_is_increased_to_distinct_even_lanes”场景的契约、输出结果和边界行为。
     def test_odd_natural_count_is_increased_to_distinct_even_lanes(self):
         area = polygon(((0, 0), (500, 0), (500, 1000), (0, 1000)))
 
@@ -80,6 +85,7 @@ class ModelingCoverageRuntimeTest(unittest.TestCase):
         offsets = [round(lane.offset_cm, 6) for lane in result.lanes]
         self.assertEqual(len(offsets), len(set(offsets)))
 
+    # 测试作用：验证“even_natural_count_is_kept_and_overlap_is_at_least_ten”场景的契约、输出结果和边界行为。
     def test_even_natural_count_is_kept_and_overlap_is_at_least_ten(self):
         area = polygon(((0, 0), (400, 0), (400, 1000), (0, 1000)))
 
@@ -90,6 +96,7 @@ class ModelingCoverageRuntimeTest(unittest.TestCase):
         self.assertEqual(len(result.lanes), 4)
         self.assertGreaterEqual(result.actual_overlap_cm, 10.0)
 
+    # 测试作用：验证“narrow_area_produces_two_symmetric_distinct_lanes”场景的契约、输出结果和边界行为。
     def test_narrow_area_produces_two_symmetric_distinct_lanes(self):
         area = polygon(((0, 0), (80, 0), (80, 500), (0, 500)))
 
@@ -102,6 +109,7 @@ class ModelingCoverageRuntimeTest(unittest.TestCase):
         self.assertNotEqual(result.lanes[0].offset_cm, result.lanes[1].offset_cm)
         self.assertGreaterEqual(result.actual_overlap_cm, 10.0)
 
+    # 测试作用：验证“invalid_overlap_and_self_intersection_are_rejected”场景的契约、输出结果和边界行为。
     def test_invalid_overlap_and_self_intersection_are_rejected(self):
         valid = polygon(((0, 0), (500, 0), (500, 1000), (0, 1000)))
         invalid_overlap = self.api.plan_coverage(valid, 0.0, 116.0, 116.0)

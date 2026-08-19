@@ -1,3 +1,4 @@
+# 文件作用：定义暂停或恢复当前任务的服务接口。
 bool pause
 ---
 bool success

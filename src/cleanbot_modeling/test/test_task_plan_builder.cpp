@@ -1,9 +1,11 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include "cleanbot_modeling/task_plan_builder.hpp"
 
 namespace {
 
+// 辅助函数作用：为测试场景提供 rectangle_model 所需的准备、执行或清理逻辑。
 cleanbot::modeling::CleaningModel rectangle_model() {
   cleanbot::modeling::CleaningModel model;
   model.id = "model-1";
@@ -39,6 +41,7 @@ cleanbot::modeling::CleaningModel rectangle_model() {
   return model;
 }
 
+// 测试目的：验证 TaskPlanBuilder.BuildsEvenSnakePlan 场景的行为、状态变化和边界条件。
 TEST(TaskPlanBuilder, BuildsEvenSnakePlan) {
   const auto result =
       cleanbot::modeling::build_task_plan(
@@ -50,6 +53,7 @@ TEST(TaskPlanBuilder, BuildsEvenSnakePlan) {
   EXPECT_EQ(result.plan.segments.size(), 11u);
 }
 
+// 测试目的：验证 TaskPlanBuilder.RejectsUnconfirmedModel 场景的行为、状态变化和边界条件。
 TEST(TaskPlanBuilder, RejectsUnconfirmedModel) {
   auto model = rectangle_model();
   model.recognition_confirmed = false;

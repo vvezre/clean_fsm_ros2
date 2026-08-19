@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -15,6 +16,7 @@ using cleanbot::common::PublisherEpochStatus;
 using cleanbot::common::PublisherEpochTracker;
 using cleanbot::common::PublisherIdentity;
 
+// 辅助函数作用：通过 identity 构造当前测试所需的输入数据。
 PublisherIdentity identity(
   std::string implementation_identifier,
   std::initializer_list<std::uint8_t> gid)
@@ -24,6 +26,7 @@ PublisherIdentity identity(
     std::vector<std::uint8_t>(gid)};
 }
 
+// 测试目的：验证 PublisherEpochTracker.RejectsInvalidIdentitiesWithoutChangingSession 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, RejectsInvalidIdentitiesWithoutChangingSession)
 {
   PublisherEpochTracker tracker;
@@ -44,6 +47,7 @@ TEST(PublisherEpochTracker, RejectsInvalidIdentitiesWithoutChangingSession)
   EXPECT_TRUE(first_valid.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.BoundsOwnedIdentityFields 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, BoundsOwnedIdentityFields)
 {
   PublisherEpochTracker tracker;
@@ -83,6 +87,7 @@ TEST(PublisherEpochTracker, BoundsOwnedIdentityFields)
   EXPECT_FALSE(invalid_gid.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.KeepsTheCurrentIdentityInTheSameEpoch 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, KeepsTheCurrentIdentityInTheSameEpoch)
 {
   PublisherEpochTracker tracker;
@@ -99,6 +104,7 @@ TEST(PublisherEpochTracker, KeepsTheCurrentIdentityInTheSameEpoch)
   EXPECT_FALSE(repeated.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.OwnsTheAcceptedIdentity 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, OwnsTheAcceptedIdentity)
 {
   PublisherEpochTracker tracker;
@@ -116,6 +122,7 @@ TEST(PublisherEpochTracker, OwnsTheAcceptedIdentity)
   EXPECT_FALSE(original.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.NewIdentityAdvancesEpochAndRetiresOldIdentity 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, NewIdentityAdvancesEpochAndRetiresOldIdentity)
 {
   PublisherEpochTracker tracker;
@@ -140,6 +147,7 @@ TEST(PublisherEpochTracker, NewIdentityAdvancesEpochAndRetiresOldIdentity)
   EXPECT_FALSE(repeated_current.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.IdentityIncludesImplementationIdentifierAndEveryGidByte 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, IdentityIncludesImplementationIdentifierAndEveryGidByte)
 {
   PublisherEpochTracker tracker;
@@ -162,6 +170,7 @@ TEST(PublisherEpochTracker, IdentityIncludesImplementationIdentifierAndEveryGidB
   EXPECT_TRUE(different_final_byte.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.RetiredStatusTakesPrecedenceOverExhaustion 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, RetiredStatusTakesPrecedenceOverExhaustion)
 {
   PublisherEpochTracker tracker(1U, 2U);
@@ -177,6 +186,7 @@ TEST(PublisherEpochTracker, RetiredStatusTakesPrecedenceOverExhaustion)
   EXPECT_FALSE(retired.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.FailsClosedBeforeRetiredIdentityCapacityIsExceeded 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, FailsClosedBeforeRetiredIdentityCapacityIsExceeded)
 {
   PublisherEpochTracker tracker(1U);
@@ -197,6 +207,7 @@ TEST(PublisherEpochTracker, FailsClosedBeforeRetiredIdentityCapacityIsExceeded)
   EXPECT_FALSE(still_current.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.ZeroRetiredCapacityAllowsOnlyTheFirstIdentity 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, ZeroRetiredCapacityAllowsOnlyTheFirstIdentity)
 {
   PublisherEpochTracker tracker(0U);
@@ -212,6 +223,7 @@ TEST(PublisherEpochTracker, ZeroRetiredCapacityAllowsOnlyTheFirstIdentity)
   EXPECT_FALSE(switch_attempt.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.FailsClosedAtConfiguredEpochCeilingWithoutWrapping 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, FailsClosedAtConfiguredEpochCeilingWithoutWrapping)
 {
   PublisherEpochTracker tracker(
@@ -230,6 +242,7 @@ TEST(PublisherEpochTracker, FailsClosedAtConfiguredEpochCeilingWithoutWrapping)
   EXPECT_FALSE(exhausted.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.ZeroEpochCeilingRejectsEvenTheFirstValidIdentity 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, ZeroEpochCeilingRejectsEvenTheFirstValidIdentity)
 {
   PublisherEpochTracker tracker(8U, 0U);
@@ -241,6 +254,7 @@ TEST(PublisherEpochTracker, ZeroEpochCeilingRejectsEvenTheFirstValidIdentity)
   EXPECT_FALSE(exhausted.session_changed);
 }
 
+// 测试目的：验证 PublisherEpochTracker.DefaultEpochCeilingIsUint64Max 场景的行为、状态变化和边界条件。
 TEST(PublisherEpochTracker, DefaultEpochCeilingIsUint64Max)
 {
   EXPECT_EQ(
@@ -249,3 +263,4 @@ TEST(PublisherEpochTracker, DefaultEpochCeilingIsUint64Max)
 }
 
 }  // namespace
+// 文件作用：验证发布者身份、会话代际切换和历史身份拒绝规则。

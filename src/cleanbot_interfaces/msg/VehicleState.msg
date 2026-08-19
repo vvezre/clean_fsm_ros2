@@ -1,3 +1,4 @@
+# 文件作用：定义面向上层应用的车辆控制、健康、故障和作业状态消息。
 builtin_interfaces/Time stamp
 string control_state
 string health_state

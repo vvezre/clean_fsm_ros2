@@ -1,3 +1,9 @@
+/*
+ * 文件作用：实现旧下位机串口的Boost.Asio异步读写、队列调度和断线重连。
+ *
+ * ROS2线程只调用send/connected；所有串口句柄、发送队列、接收缓冲和定时器操作
+ * 都串行运行在内部I/O线程。读到的字节经FrameBuffer重组成23字节帧后回调节点。
+ */
 #include "cleanbot_hardware/lower_machine_serial.hpp"
 
 #include <algorithm>
@@ -32,6 +38,7 @@ void LowerMachineSerial::start() {
   }
   stopping_.store(false);
   work_.reset(new boost::asio::io_service::work(io_service_));
+  // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
   io_service_.post([this]() { openSerial(); });
   io_thread_ = std::thread([this]() { io_service_.run(); });
 }
@@ -42,6 +49,7 @@ void LowerMachineSerial::stop() {
     return;
   }
   stopping_.store(true);
+  // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
   io_service_.post([this]() {
     boost::system::error_code ignored;
     reconnect_timer_.cancel(ignored);
@@ -72,6 +80,7 @@ void LowerMachineSerial::send(
     }
     return;
   }
+  // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
   io_service_.post([this, frame, priority, coalescing_key, callback]() {
     enqueueWrite(frame, priority, coalescing_key, callback);
   });
@@ -131,6 +140,7 @@ void LowerMachineSerial::beginRead() {
   }
   serial_port_.async_read_some(
       boost::asio::buffer(read_buffer_),
+      // 异步回调作用：处理读取完成事件，分发收到的数据或进入错误恢复流程。
       [this](const boost::system::error_code& error, const std::size_t bytes_transferred) {
         onRead(error, bytes_transferred);
       });
@@ -173,8 +183,10 @@ void LowerMachineSerial::enqueueWrite(
     return;
   }
 
+  // 把队列内部事件转换为节点可理解的传输事件；它仍不代表下位机ACK。
   WriteQueueCallback queue_callback;
   if (callback) {
+    // 队列回调作用：把写队列事件转换为上层发送完成或失败通知。
     queue_callback = [callback](const WriteQueueEvent event) {
       if (event == WriteQueueEvent::kWritten) {
         callback(SendEvent::kWritten, "serial_write_completed");
@@ -210,6 +222,7 @@ void LowerMachineSerial::beginWrite() {
   const auto active_frame = write_queue_.front_handle();
   boost::asio::async_write(
       serial_port_, boost::asio::buffer(*active_frame),
+      // 异步回调作用：处理写入完成事件，释放当前帧并继续发送队列。
       [this, active_frame](const boost::system::error_code& error, std::size_t) {
         onWrite(error);
       });
@@ -255,6 +268,7 @@ void LowerMachineSerial::scheduleReconnect() {
   }
   reconnect_pending_ = true;
   reconnect_timer_.expires_from_now(boost::posix_time::seconds(1));
+  // 定时回调作用：处理定时器到期事件，并执行超时检查或重连操作。
   reconnect_timer_.async_wait([this](const boost::system::error_code& error) {
     reconnect_pending_ = false;
     if (!error && !stopping_.load()) {

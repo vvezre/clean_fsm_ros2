@@ -1,3 +1,7 @@
+/*
+ * 文件作用：云端命令实现：校验云端命令并转换为内部控制语义。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_gateway/cloud_command.hpp"
 
 #include <cmath>
@@ -6,6 +10,7 @@ namespace cleanbot {
 namespace gateway {
 namespace {
 
+// 构造统一的云命令拒绝结果和业务错误说明。
 CloudCommandDecision reject(
     const std::string& code,
     const std::string& message) {
@@ -15,16 +20,19 @@ CloudCommandDecision reject(
   return decision;
 }
 
+// 判断输入为有限数且位于包含端点的允许范围内。
 bool finite_in_range(const double value, const double minimum, const double maximum) {
   return std::isfinite(value) && value >= minimum && value <= maximum;
 }
 
 }  // namespace
 
+// 保存命令时效参数，并用同一配置创建摇杆映射器。
 CloudCommandTranslator::CloudCommandTranslator(
     const CloudCommandParameters& parameters)
     : parameters_(parameters), joystick_mapper_(parameters.joystick) {}
 
+// 校验云命令类型、时间和摇杆参数，转换为人工控制或急停决策。
 CloudCommandDecision CloudCommandTranslator::translate(
     const CloudCommandInput& input,
     const std::int64_t now_sec) const {

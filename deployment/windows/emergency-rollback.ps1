@@ -1,3 +1,4 @@
+# 文件作用：从 Windows 开发机远程触发树莓派执行紧急版本回滚。
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

@@ -1,3 +1,4 @@
+# 文件作用：验证 publisher epoch tracker runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -34,6 +35,7 @@ else:
     cppyy = None
 
 
+# 辅助方法：为 identity 测试场景准备输入、执行操作或整理结果。
 def identity(implementation_identifier, gid):
     publisher = cppyy.gbl.cleanbot.common.PublisherIdentity()
     publisher.implementation_identifier = implementation_identifier
@@ -44,9 +46,11 @@ def identity(implementation_identifier, gid):
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "publisher epoch tracker header is unavailable")
 class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         self.api = cppyy.gbl.cleanbot.common
 
+    # 测试作用：验证“first_current_switch_and_retired_observations”场景的契约、输出结果和边界行为。
     def test_first_current_switch_and_retired_observations(self):
         tracker = self.api.PublisherEpochTracker()
         accepted = self.api.PublisherEpochStatus.kAccepted
@@ -72,6 +76,7 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
         self.assertEqual(retired_result.epoch, 2)
         self.assertFalse(retired_result.session_changed)
 
+    # 测试作用：验证“rejects_invalid_identity_forms”场景的契约、输出结果和边界行为。
     def test_rejects_invalid_identity_forms(self):
         tracker = self.api.PublisherEpochTracker()
         invalid = self.api.PublisherEpochStatus.kInvalid
@@ -87,6 +92,7 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
             self.assertEqual(result.epoch, 0)
             self.assertFalse(result.session_changed)
 
+    # 测试作用：验证“bounds_owned_identity_fields”场景的契约、输出结果和边界行为。
     def test_bounds_owned_identity_fields(self):
         tracker = self.api.PublisherEpochTracker()
         maximum_identifier_bytes = int(
@@ -124,6 +130,7 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
             self.assertEqual(result.epoch, 1)
             self.assertFalse(result.session_changed)
 
+    # 测试作用：验证“distinguishes_implementation_identifier_and_full_gid”场景的契约、输出结果和边界行为。
     def test_distinguishes_implementation_identifier_and_full_gid(self):
         tracker = self.api.PublisherEpochTracker()
 
@@ -137,6 +144,7 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
         self.assertEqual(gid_changed.epoch, 3)
         self.assertTrue(gid_changed.session_changed)
 
+    # 测试作用：验证“retired_identity_precedes_exhaustion”场景的契约、输出结果和边界行为。
     def test_retired_identity_precedes_exhaustion(self):
         tracker = self.api.PublisherEpochTracker(1, 2)
         first = identity("rmw-a", [1])
@@ -150,6 +158,7 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
         self.assertEqual(result.epoch, 2)
         self.assertFalse(result.session_changed)
 
+    # 测试作用：验证“capacity_and_epoch_limits_fail_closed_without_mutating”场景的契约、输出结果和边界行为。
     def test_capacity_and_epoch_limits_fail_closed_without_mutating(self):
         capacity_limited = self.api.PublisherEpochTracker(0)
         first = identity("rmw-a", [1])
@@ -190,6 +199,7 @@ class PublisherEpochTrackerRuntimeTest(unittest.TestCase):
 
 
 class PublisherEpochTrackerAvailabilityTest(unittest.TestCase):
+    # 测试作用：验证“header_exists”场景的契约、输出结果和边界行为。
     def test_header_exists(self):
         self.assertTrue(HEADER.is_file(), str(HEADER))
 

@@ -1,9 +1,11 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include "cleanbot_modeling/region_recognizer.hpp"
 
 namespace {
 
+// 辅助函数作用：为测试场景提供 rectangle 所需的准备、执行或清理逻辑。
 cleanbot::modeling::ModelGroup rectangle() {
   cleanbot::modeling::ModelGroup group;
   group.id = "g1";
@@ -20,6 +22,7 @@ cleanbot::modeling::ModelGroup rectangle() {
   return group;
 }
 
+// 测试目的：验证 RegionRecognizer.RecognizesRectangleAsSingleSubArea 场景的行为、状态变化和边界条件。
 TEST(RegionRecognizer, RecognizesRectangleAsSingleSubArea) {
   const auto result = cleanbot::modeling::recognize_group(rectangle());
 
@@ -29,6 +32,7 @@ TEST(RegionRecognizer, RecognizesRectangleAsSingleSubArea) {
   EXPECT_TRUE(result.group.sub_areas.front().confirmed);
 }
 
+// 测试目的：验证 RegionRecognizer.RecoversUnorderedConvexBoundary 场景的行为、状态变化和边界条件。
 TEST(RegionRecognizer, RecoversUnorderedConvexBoundary) {
   auto group = rectangle();
   std::swap(group.points[1], group.points[2]);

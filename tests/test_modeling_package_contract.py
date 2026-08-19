@@ -1,3 +1,4 @@
+# 文件作用：验证 modeling package contract 相关契约、运行逻辑和边界条件。
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -10,6 +11,7 @@ PACKAGE = SRC / "cleanbot_modeling"
 
 
 class ModelingPackageContractTest(unittest.TestCase):
+    # 测试作用：验证“typed_modeling_interfaces_exist”场景的契约、输出结果和边界行为。
     def test_typed_modeling_interfaces_exist(self):
         required = {
             "msg/ModelPoint.msg": (
@@ -100,6 +102,7 @@ class ModelingPackageContractTest(unittest.TestCase):
         for relative in required:
             self.assertIn('"{}"'.format(relative), cmake)
 
+    # 测试作用：验证“modeling_package_declares_required_dependencies”场景的契约、输出结果和边界行为。
     def test_modeling_package_declares_required_dependencies(self):
         package_xml = PACKAGE / "package.xml"
         cmake_path = PACKAGE / "CMakeLists.txt"
@@ -128,6 +131,7 @@ class ModelingPackageContractTest(unittest.TestCase):
         ):
             self.assertIn(token, cmake)
 
+    # 测试作用：验证“modeling_node_is_configured_and_launched”场景的契约、输出结果和边界行为。
     def test_modeling_node_is_configured_and_launched(self):
         source_path = PACKAGE / "src" / "modeling_manager_node.cpp"
         self.assertTrue(source_path.is_file())

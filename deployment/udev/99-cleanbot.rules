@@ -1,3 +1,4 @@
+# 文件作用：按设备序列号为下位机和 RTK 串口创建稳定符号链接及访问权限。
 # Replace both serial placeholders with the actual ID_SERIAL_SHORT values before
 # installing these rules. As shipped, these rules intentionally match no device.
 SUBSYSTEM=="tty", ATTRS{serial}=="REPLACE_LOWER_MACHINE_SERIAL", GROUP="dialout", MODE="0660", SYMLINK+="cleanbot/lower-machine"

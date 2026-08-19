@@ -1,3 +1,7 @@
+/*
+ * 文件作用：HTTP控制路由实现：把HTTP请求分发到对应的控制服务或主题。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_http/http_control_router.hpp"
 
 #include <cerrno>
@@ -24,6 +28,7 @@ std::vector<std::string> split(
     const std::string& value,
     char delimiter);
 
+// 以简单循环查找字符位置，避免路径解析依赖区域设置。
 std::size_t find_character(const std::string& value, const char target) {
   for (std::size_t index = 0u; index < value.size(); ++index) {
     if (value[index] == target) {
@@ -33,6 +38,7 @@ std::size_t find_character(const std::string& value, const char target) {
   return std::string::npos;
 }
 
+// 构造兼容旧接口的纯文本成功响应并携带待执行动作。
 HttpControlResult text_success(const HttpControlAction action) {
   HttpControlResult result;
   result.status_code = 200;
@@ -42,6 +48,7 @@ HttpControlResult text_success(const HttpControlAction action) {
   return result;
 }
 
+// 构造不需要后续动作的空成功响应。
 HttpControlResult empty_success() {
   HttpControlResult result;
   result.status_code = 204;
@@ -50,6 +57,7 @@ HttpControlResult empty_success() {
   return result;
 }
 
+// 构造由网关节点继续调用 ROS 服务的业务动作结果。
 HttpControlResult business_action(const HttpControlAction action) {
   HttpControlResult result;
   result.status_code = 200;
@@ -58,6 +66,7 @@ HttpControlResult business_action(const HttpControlAction action) {
   return result;
 }
 
+// 构造包含 HTTP 状态码和统一 JSON 错误体的失败结果。
 HttpControlResult error_result(
     const int status_code,
     const std::string& code,
@@ -70,6 +79,7 @@ HttpControlResult error_result(
   return result;
 }
 
+// 从请求目标中剥离查询字符串，仅保留路由路径。
 std::string request_path(const std::string& target) {
   for (std::size_t index = 0; index < target.size(); ++index) {
     if (target[index] == '?') {
@@ -86,6 +96,7 @@ struct JoystickSequence {
   std::uint64_t sequence{0u};
 };
 
+// 严格解析无符号 64 位整数，拒绝空串、负号和尾随字符。
 bool parse_uint64(const std::string& value, std::uint64_t& parsed) {
   if (value.empty()) {
     return false;
@@ -105,12 +116,14 @@ bool parse_uint64(const std::string& value, std::uint64_t& parsed) {
   return true;
 }
 
+// 判断字符是否为会话标识允许的 ASCII 字母或数字。
 bool ascii_alphanumeric(const unsigned char character) {
   return (character >= '0' && character <= '9') ||
       (character >= 'A' && character <= 'Z') ||
       (character >= 'a' && character <= 'z');
 }
 
+// 校验前端控制会话标识长度和允许字符。
 bool valid_session_id(const std::string& value) {
   if (value.empty() || value.size() > 128u) {
     return false;
@@ -124,6 +137,7 @@ bool valid_session_id(const std::string& value) {
   return true;
 }
 
+// 校验计划标识长度及可安全放入查询参数的字符集合。
 bool valid_plan_id(const std::string& value) {
   if (value.empty() || value.size() > 128u) {
     return false;
@@ -137,6 +151,7 @@ bool valid_plan_id(const std::string& value) {
   return true;
 }
 
+// 解析执行计划查询参数，并提取计划标识和刷盘速度。
 bool parse_execute_plan_query(
     const std::string& target,
     std::string& plan_id,
@@ -185,6 +200,7 @@ bool parse_execute_plan_query(
   return true;
 }
 
+// 从摇杆请求查询参数中解析会话标识和严格递增序号。
 JoystickSequence parse_joystick_sequence(const std::string& target) {
   JoystickSequence result;
   const auto query_at = find_character(target, '?');
@@ -240,11 +256,13 @@ JoystickSequence parse_joystick_sequence(const std::string& target) {
   return result;
 }
 
+// 判断请求路径是否以指定前缀开头。
 bool starts_with(const std::string& value, const std::string& prefix) {
   return value.size() >= prefix.size() &&
       value.compare(0, prefix.size(), prefix) == 0;
 }
 
+// 按分隔符切分路径参数并保留各段顺序。
 std::vector<std::string> split(const std::string& value, const char delimiter) {
   std::vector<std::string> parts;
   std::size_t begin = 0;
@@ -258,6 +276,7 @@ std::vector<std::string> split(const std::string& value, const char delimiter) {
   return parts;
 }
 
+// 严格解析有限浮点数，拒绝非法文本和无穷值。
 bool parse_finite_double(const std::string& value, double& parsed) {
   if (value.empty()) {
     return false;
@@ -269,21 +288,25 @@ bool parse_finite_double(const std::string& value, double& parsed) {
       std::isfinite(parsed);
 }
 
+// 判断数值是否位于包含端点的允许范围内。
 bool in_range(const double value, const double minimum, const double maximum) {
   return value >= minimum && value <= maximum;
 }
 
 }  // namespace
 
+// 使用摇杆映射参数创建无 ROS 依赖的 HTTP 路由器。
 HttpControlRouter::HttpControlRouter(
     const cleanbot::control::JoystickParameters& parameters)
     : joystick_mapper_(parameters) {}
 
+// 运行期重建摇杆映射器，使新的限速参数立即生效。
 void HttpControlRouter::updateParameters(
     const cleanbot::control::JoystickParameters& parameters) {
   joystick_mapper_ = cleanbot::control::JoystickMapper(parameters);
 }
 
+// 按 HTTP 方法、路径和参数生成响应及待执行车辆动作。
 HttpControlResult HttpControlRouter::route(
     const std::string& method,
     const std::string& target) const {

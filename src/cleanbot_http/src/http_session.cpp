@@ -1,3 +1,7 @@
+/*
+ * 文件作用：HTTP会话实现：解析请求、生成响应并处理连接读写。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_http/http_session.hpp"
 
 #include <utility>
@@ -14,6 +18,7 @@ using tcp = asio::ip::tcp;
 
 namespace {
 
+// 构造请求处理器异常时使用的固定 500 JSON 响应。
 HttpControlResult internal_error() {
   HttpControlResult result;
   result.status_code = 500;
@@ -25,6 +30,7 @@ HttpControlResult internal_error() {
 
 }  // namespace
 
+// 接管已连接 socket，并保存路由、关闭回调和单次请求超时。
 HttpSession::HttpSession(
     tcp::socket socket,
     RequestHandler request_handler,
@@ -35,6 +41,7 @@ HttpSession::HttpSession(
       close_handler_(std::move(close_handler)),
       request_timeout_(request_timeout) {}
 
+// 设置读取期限并异步读取一条完整 HTTP 请求。
 void HttpSession::start() {
   if (closed_) {
     return;
@@ -51,10 +58,12 @@ void HttpSession::start() {
       });
 }
 
+// 主动终止当前连接并触发统一关闭流程。
 void HttpSession::stop() {
   close();
 }
 
+// 处理读取结果，将方法和路径交给路由器并捕获所有异常。
 void HttpSession::onRead(
     const beast::error_code error,
     const std::size_t) {
@@ -78,6 +87,7 @@ void HttpSession::onRead(
   sendResponse(result);
 }
 
+// 将业务结果组装为禁用缓存和跨域允许的 HTTP 响应并异步发送。
 void HttpSession::sendResponse(const HttpControlResult& result) {
   response_ = beast_http::response<beast_http::string_body>{
       static_cast<beast_http::status>(result.status_code),
@@ -103,12 +113,14 @@ void HttpSession::sendResponse(const HttpControlResult& result) {
       });
 }
 
+// 响应发送结束后关闭一次性 HTTP 连接。
 void HttpSession::onWrite(
     const beast::error_code,
     const std::size_t) {
   close();
 }
 
+// 幂等取消读写、关闭 socket，并通知服务器移除会话。
 void HttpSession::close() {
   if (closed_) {
     return;

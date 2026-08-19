@@ -1,3 +1,4 @@
+# 文件作用：定义读取配置项及可选敏感值的服务接口。
 string[] keys
 bool include_sensitive
 ---

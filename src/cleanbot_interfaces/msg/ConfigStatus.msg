@@ -1,3 +1,4 @@
+# 文件作用：定义配置服务就绪、数据库与缺失必填项状态消息。
 builtin_interfaces/Time stamp
 bool config_ready
 bool database_writable

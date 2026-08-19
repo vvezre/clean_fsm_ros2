@@ -1,3 +1,7 @@
+/*
+ * 文件作用：云消息编解码实现：在JSON消息和内部命令结构之间转换。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_gateway/cloud_message_codec.hpp"
 
 #include <cstdint>
@@ -12,6 +16,7 @@ namespace {
 
 using Json = nlohmann::json;
 
+// 安全读取 JSON 字符串字段，字段不存在或类型错误时返回空串。
 std::string string_value(const Json& object, const char* key) {
   const auto found = object.find(key);
   return found != object.end() && found->is_string()
@@ -19,6 +24,7 @@ std::string string_value(const Json& object, const char* key) {
       : std::string();
 }
 
+// 安全读取 JSON 数值字段，字段不存在或类型错误时返回零。
 double number_value(const Json& object, const char* key) {
   const auto found = object.find(key);
   return found != object.end() && found->is_number()
@@ -26,6 +32,7 @@ double number_value(const Json& object, const char* key) {
       : 0.0;
 }
 
+// 使用设备身份和时间戳构造云端消息的统一外层结构。
 Json envelope(
     const CloudIdentity& identity,
     const std::int64_t timestamp_sec,
@@ -41,9 +48,11 @@ Json envelope(
 
 }  // namespace
 
+// 保存当前机器人身份，用于来信校验和回执封装。
 CloudMessageCodec::CloudMessageCodec(CloudIdentity identity)
     : identity_(std::move(identity)) {}
 
+// 解析云端 JSON，校验设备身份和命令字段并生成内部命令。
 CloudDecodeResult CloudMessageCodec::decode(
     const std::string& payload,
     const bool retained) const {
@@ -117,6 +126,7 @@ CloudDecodeResult CloudMessageCodec::decode(
   }
 }
 
+// 编码命令已接收确认消息。
 std::string CloudMessageCodec::encode_ack(
     const CloudCommandInput& command,
     const std::string& status,
@@ -134,6 +144,7 @@ std::string CloudMessageCodec::encode_ack(
       }).dump();
 }
 
+// 编码命令最终执行结果及业务错误信息。
 std::string CloudMessageCodec::encode_result(
     const CloudCommandInput& command,
     const bool success,

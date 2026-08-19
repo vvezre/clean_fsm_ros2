@@ -1,3 +1,4 @@
+# 文件作用：定义下位机状态帧解析后的车辆硬件运行状态消息。
 builtin_interfaces/Time stamp
 uint64 frame_sequence
 bool connected

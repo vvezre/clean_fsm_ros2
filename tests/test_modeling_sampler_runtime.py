@@ -1,3 +1,4 @@
+# 文件作用：验证 modeling sampler runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import math
 import os
@@ -29,6 +30,7 @@ SOURCE = PACKAGE / "src" / "point_sampler.cpp"
 CORE_LOADED = False
 
 
+# 辅助方法：读取或加载 load_core 所需的测试数据并返回解析结果。
 def load_core(test_case):
     global CORE_LOADED
     test_case.assertTrue(HEADER.is_file(), "point sampler header is missing")
@@ -48,6 +50,7 @@ def load_core(test_case):
     CORE_LOADED = True
 
 
+# 辅助方法：构造 make_samples 所需的测试对象、参数或临时资源。
 def make_samples(
     count=10,
     fixed=True,
@@ -75,10 +78,12 @@ def make_samples(
 
 
 class ModelingSamplerRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         load_core(self)
         self.api = cppyy.gbl.cleanbot.modeling
 
+    # 测试作用：验证“stable_fixed_samples_produce_mean_point”场景的契约、输出结果和边界行为。
     def test_stable_fixed_samples_produce_mean_point(self):
         result = self.api.sample_point(make_samples(), 10, 0.05)
 
@@ -92,6 +97,7 @@ class ModelingSamplerRuntimeTest(unittest.TestCase):
             result.point.heading_deg < 2.0 or result.point.heading_deg > 358.0
         )
 
+    # 测试作用：验证“rejects_invalid_sampling_conditions”场景的契约、输出结果和边界行为。
     def test_rejects_invalid_sampling_conditions(self):
         cases = (
             (make_samples(count=9), "SAMPLE_COUNT_INSUFFICIENT"),
@@ -105,6 +111,7 @@ class ModelingSamplerRuntimeTest(unittest.TestCase):
                 self.assertFalse(result.success)
                 self.assertEqual(result.code, expected_code)
 
+    # 测试作用：验证“rejects_samples_with_more_than_five_centimetres_radius”场景的契约、输出结果和边界行为。
     def test_rejects_samples_with_more_than_five_centimetres_radius(self):
         samples = make_samples()
         samples[9].lat += 0.000001

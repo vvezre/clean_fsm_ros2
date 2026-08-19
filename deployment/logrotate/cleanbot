@@ -1,3 +1,4 @@
+# 文件作用：限制 Cleanbot ROS 日志保留数量和单文件大小，并启用压缩轮转。
 /var/log/cleanbot/ros/*.log /var/log/cleanbot/ros/*/*.log {
     daily
     rotate 14

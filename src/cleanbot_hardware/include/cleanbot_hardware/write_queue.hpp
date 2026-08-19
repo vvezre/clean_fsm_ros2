@@ -1,3 +1,10 @@
+/*
+ * 文件作用：声明旧下位机串口的有界优先级发送队列。
+ *
+ * 输入：已经编码好的命令批次、写入优先级和可选合并键。
+ * 输出：按安全级别排序的待写数据及写入/替换/淘汰事件。
+ * 安全规则：正在异步写入的队首不可移动；刹车和高优先级帧不被低优先级命令淘汰。
+ */
 #ifndef CLEANBOT_HARDWARE__WRITE_QUEUE_HPP_
 #define CLEANBOT_HARDWARE__WRITE_QUEUE_HPP_
 
@@ -12,13 +19,15 @@
 namespace cleanbot {
 namespace hardware {
 
+// 数值越大越优先；Critical为传输层预留的最高等级。
 enum class WritePriority : std::uint8_t {
   kContinuous = 10,
   kFinite = 20,
   kSafety = 30,
-  kProtocolAck = 40,
+  kCritical = 40,
 };
 
+// 队列项终态，用于上层映射ROS2命令生命周期。
 enum class WriteQueueEvent : std::uint8_t {
   kWritten = 0,
   kSuperseded = 1,
@@ -30,6 +39,7 @@ using WriteQueueCallback = std::function<void(WriteQueueEvent)>;
 /// 根据已编码命令帧的状态和刹车字段，推断重发帧应使用的写入优先级。
 WritePriority classify_command_frame(const std::vector<std::uint8_t>& frame);
 
+// 单线程使用的有界稳定优先级队列，由LowerMachineSerial的I/O线程独占。
 class PriorityWriteQueue {
  public:
   /// 创建有容量上限的优先级发送队列。
@@ -58,6 +68,7 @@ class PriorityWriteQueue {
   std::size_t size() const;
 
  private:
+  // 共享帧句柄确保Boost.Asio异步写期间底层字节内存不会失效。
   struct Item {
     std::shared_ptr<std::vector<std::uint8_t>> frame;
     WritePriority priority{WritePriority::kContinuous};

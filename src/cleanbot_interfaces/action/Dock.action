@@ -1,3 +1,4 @@
+# 文件作用：定义车辆入库、离库动作的目标、执行结果和进度反馈。
 uint8 MODE_ENTER=1
 uint8 MODE_EXIT=2
 

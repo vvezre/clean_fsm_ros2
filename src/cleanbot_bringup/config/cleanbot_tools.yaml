@@ -1,0 +1,18 @@
+# 文件作用：配置诊断与可视化辅助节点的运行参数。
+cleanbot_visualization_node:
+  ros__parameters:
+    visualization.origin_lat: 0.0
+    visualization.origin_lon: 0.0
+    visualization.origin_valid: false
+    visualization.rtk_timeout_sec: 2.0
+    visualization.path_history_size: 500
+
+cleanbot_diagnostics_node:
+  ros__parameters:
+    diagnostics.publish_period_sec: 1.0
+    diagnostics.config_timeout_sec: 5.0
+    diagnostics.hardware_timeout_sec: 2.0
+    diagnostics.rtk_timeout_sec: 2.0
+    diagnostics.tracking_timeout_sec: 1.0
+    diagnostics.mission_timeout_sec: 2.0
+    diagnostics.maintenance_timeout_sec: 2.0

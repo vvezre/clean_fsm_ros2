@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build deterministic Cleanbot ARM64 release assets."""
+# 文件作用：生成内容可复现的 Cleanbot ARM64 发布压缩包和校验清单。
 
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ class ReleaseAssets(NamedTuple):
     manifest: Path
 
 
+# 方法作用：把对象编码为字段有序、无多余空白且以换行结尾的规范 JSON 字节。
 def _canonical_json_bytes(value) -> bytes:
     return (
         json.dumps(
@@ -44,6 +45,7 @@ def _canonical_json_bytes(value) -> bytes:
     )
 
 
+# 方法作用：校验安装目录结构，并按稳定顺序列出需要写入发布包的目录和文件。
 def _release_entries(install_directory: Path):
     if not install_directory.is_dir() or install_directory.is_symlink():
         raise ValueError("install directory must be a real directory")
@@ -68,6 +70,7 @@ def _release_entries(install_directory: Path):
     return entries
 
 
+# 方法作用：为归档成员生成固定属主、时间戳和权限的元数据，保证构建结果可复现。
 def _normalized_info(name: str, source: Optional[Path]) -> tarfile.TarInfo:
     information = tarfile.TarInfo(name)
     information.uid = 0
@@ -91,6 +94,7 @@ def _normalized_info(name: str, source: Optional[Path]) -> tarfile.TarInfo:
     return information
 
 
+# 方法作用：分块读取文件并返回其 SHA-256 十六进制摘要。
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -99,6 +103,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# 方法作用：校验版本参数，构建确定性压缩包并生成包含大小和摘要的发布清单。
 def build_release_assets(
     *,
     release: str,
@@ -182,6 +187,7 @@ def build_release_assets(
     return ReleaseAssets(archive_path, manifest_path)
 
 
+# 方法作用：创建发布资产构建命令的参数解析器。
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--release", required=True)
@@ -190,6 +196,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+# 程序入口：解析命令行参数，生成发布资产并输出生成文件路径。
 def main(argv=None) -> int:
     arguments = _parser().parse_args(argv)
     result = build_release_assets(

@@ -1,3 +1,7 @@
+/*
+ * 文件作用：NTRIP协议实现：生成请求头并解析服务端响应状态。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_rtk/ntrip_protocol.hpp"
 
 #include <sstream>
@@ -7,6 +11,7 @@ namespace rtk {
 
 namespace {
 
+// 使用标准 Base64 字母表编码 NTRIP Basic 认证凭据。
 std::string base64Encode(const std::string& input) {
   static const char alphabet[] =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -30,6 +35,7 @@ std::string base64Encode(const std::string& input) {
   return output;
 }
 
+// 不依赖额外库判断字符串是否以指定前缀开头。
 bool startsWith(const std::string& value, const std::string& prefix) {
   if (value.size() < prefix.size()) {
     return false;
@@ -42,6 +48,7 @@ bool startsWith(const std::string& value, const std::string& prefix) {
   return true;
 }
 
+// 以逐字符比较方式判断字符串是否包含目标文本。
 bool containsText(const std::string& value, const std::string& target) {
   if (target.empty() || value.size() < target.size()) {
     return false;
@@ -63,11 +70,13 @@ bool containsText(const std::string& value, const std::string& target) {
 
 }  // namespace
 
+// 判断启用 NTRIP 后建立连接所需的主机、挂载点和认证信息是否齐全。
 bool NtripConfig::complete() const {
   return enabled && !host.empty() && port > 0u && !mountpoint.empty() &&
       !username.empty() && !password.empty();
 }
 
+// 规范化挂载点并生成带 Basic 认证的 NTRIP HTTP 请求头。
 std::string build_ntrip_request(const NtripConfig& config) {
   std::size_t mount_start = 0u;
   while (mount_start < config.mountpoint.size() && config.mountpoint[mount_start] == '/') {
@@ -85,9 +94,11 @@ std::string build_ntrip_request(const NtripConfig& config) {
   return request.str();
 }
 
+// 设置可接受的最大协议响应头长度。
 NtripResponseParser::NtripResponseParser(const std::size_t max_header_size)
     : max_header_size_(max_header_size == 0u ? 1u : max_header_size) {}
 
+// 累积网络字节，解析响应头并分离可转发的 RTCM 载荷。
 NtripResponseResult NtripResponseParser::append(
     const std::vector<std::uint8_t>& bytes) {
   NtripResponseResult result;
@@ -153,6 +164,7 @@ NtripResponseResult NtripResponseParser::append(
   return result;
 }
 
+// 重置响应头解析状态，供重连后的新会话使用。
 void NtripResponseParser::reset() {
   buffer_.clear();
   header_complete_ = false;
@@ -160,6 +172,7 @@ void NtripResponseParser::reset() {
   error_.clear();
 }
 
+// 判断响应首行是否表示 NTRIP 服务端已接受请求。
 bool NtripResponseParser::responseAccepted(const std::string& first_line) {
   if (startsWith(first_line, "ICY 200")) {
     return true;

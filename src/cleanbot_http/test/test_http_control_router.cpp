@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include "cleanbot_http/http_control_router.hpp"
@@ -5,6 +6,7 @@
 
 namespace {
 
+// 测试目的：验证 HttpControlRouter.KeepsServiceWaitShorterThanIoDeadline 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, KeepsServiceWaitShorterThanIoDeadline) {
   EXPECT_EQ(cleanbot::http::kHttpIoOperationDeadline.count(), 3000);
   EXPECT_EQ(cleanbot::http::kRosServiceResponseDeadline.count(), 2000);
@@ -13,6 +15,7 @@ TEST(HttpControlRouter, KeepsServiceWaitShorterThanIoDeadline) {
       cleanbot::http::kHttpIoOperationDeadline);
 }
 
+// 测试目的：验证 HttpControlRouter.PreservesLegacyJoystickAndParkingRoutes 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, PreservesLegacyJoystickAndParkingRoutes) {
   cleanbot::control::JoystickParameters parameters;
   parameters.max_linear_speed = 600;
@@ -34,6 +37,7 @@ TEST(HttpControlRouter, PreservesLegacyJoystickAndParkingRoutes) {
   EXPECT_TRUE(parking.brake);
 }
 
+// 测试目的：验证 HttpControlRouter.RejectsInvalidInputWithoutControlAction 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, RejectsInvalidInputWithoutControlAction) {
   const cleanbot::http::HttpControlRouter router;
   const auto result = router.route(
@@ -43,6 +47,7 @@ TEST(HttpControlRouter, RejectsInvalidInputWithoutControlAction) {
   EXPECT_EQ(result.action, cleanbot::http::HttpControlAction::kNone);
 }
 
+// 测试目的：验证 HttpControlRouter.RejectsStaleJoystickSequence 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, RejectsStaleJoystickSequence) {
   const cleanbot::http::HttpControlRouter router;
   EXPECT_EQ(
@@ -64,6 +69,7 @@ TEST(HttpControlRouter, RejectsStaleJoystickSequence) {
   EXPECT_EQ(stale.action, cleanbot::http::HttpControlAction::kNone);
 }
 
+// 测试目的：验证 HttpControlRouter.ReleasePreventsDelayedMovement 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, ReleasePreventsDelayedMovement) {
   const cleanbot::http::HttpControlRouter router;
   const auto released = router.route(
@@ -79,6 +85,7 @@ TEST(HttpControlRouter, ReleasePreventsDelayedMovement) {
   EXPECT_EQ(delayed.action, cleanbot::http::HttpControlAction::kNone);
 }
 
+// 测试目的：验证 HttpControlRouter.KeepsLegacyButRejectsPartialSequencePair 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, KeepsLegacyButRejectsPartialSequencePair) {
   const cleanbot::http::HttpControlRouter router;
   EXPECT_EQ(
@@ -98,6 +105,7 @@ TEST(HttpControlRouter, KeepsLegacyButRejectsPartialSequencePair) {
       400);
 }
 
+// 测试目的：验证 HttpControlRouter.RoutesVehicleStateAndMissionControl 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, RoutesVehicleStateAndMissionControl) {
   const cleanbot::http::HttpControlRouter router;
 
@@ -120,6 +128,7 @@ TEST(HttpControlRouter, RoutesVehicleStateAndMissionControl) {
       cleanbot::http::HttpControlAction::kMissionResume);
 }
 
+// 测试目的：验证 HttpControlRouter.EnforcesMethodsForBusinessRoutes 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, EnforcesMethodsForBusinessRoutes) {
   const cleanbot::http::HttpControlRouter router;
 
@@ -132,6 +141,7 @@ TEST(HttpControlRouter, EnforcesMethodsForBusinessRoutes) {
       405);
 }
 
+// 测试目的：验证 HttpControlRouter.ValidatesSavedPlanExecutionQuery 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, ValidatesSavedPlanExecutionQuery) {
   const cleanbot::http::HttpControlRouter router;
 
@@ -147,6 +157,7 @@ TEST(HttpControlRouter, ValidatesSavedPlanExecutionQuery) {
   EXPECT_EQ(result.brush_speed, 900);
 }
 
+// 测试目的：验证 HttpControlRouter.AcceptsPlanExecutionBoundaryValues 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, AcceptsPlanExecutionBoundaryValues) {
   const cleanbot::http::HttpControlRouter router;
   const std::string plan_id(128u, 'a');
@@ -161,6 +172,7 @@ TEST(HttpControlRouter, AcceptsPlanExecutionBoundaryValues) {
   EXPECT_EQ(result.brush_speed, 2147483647);
 }
 
+// 测试目的：验证 HttpControlRouter.RejectsOversizedAndNonAsciiPlanIds 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, RejectsOversizedAndNonAsciiPlanIds) {
   const cleanbot::http::HttpControlRouter router;
   const std::string oversized_id(129u, 'a');
@@ -180,6 +192,7 @@ TEST(HttpControlRouter, RejectsOversizedAndNonAsciiPlanIds) {
       400);
 }
 
+// 测试目的：验证 HttpControlRouter.RejectsInvalidPlanExecutionQuery 场景的行为、状态变化和边界条件。
 TEST(HttpControlRouter, RejectsInvalidPlanExecutionQuery) {
   const cleanbot::http::HttpControlRouter router;
 

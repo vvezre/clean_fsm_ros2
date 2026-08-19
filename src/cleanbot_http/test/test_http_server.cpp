@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -18,6 +19,7 @@ namespace beast = boost::beast;
 namespace beast_http = boost::beast::http;
 using tcp = asio::ip::tcp;
 
+// 辅助函数作用：为测试场景提供 successResult 所需的准备、执行或清理逻辑。
 cleanbot::http::HttpControlResult successResult(
     const std::string&,
     const std::string&) {
@@ -30,6 +32,7 @@ cleanbot::http::HttpControlResult successResult(
 
 class RunningServer {
  public:
+// 辅助函数作用：为测试场景提供 RunningServer 所需的准备、执行或清理逻辑。
   explicit RunningServer(
       const std::chrono::milliseconds timeout =
           std::chrono::milliseconds(100))
@@ -42,6 +45,7 @@ class RunningServer {
             cleanbot::http::HttpServer::ErrorHandler(),
             timeout)) {
     server_->start();
+    // 线程入口作用：运行当前节点的 I/O 事件循环，直到收到停止请求。
     thread_ = std::thread([this]() { io_context_.run(); });
   }
 
@@ -49,6 +53,7 @@ class RunningServer {
     stop();
   }
 
+// 辅助函数作用：为测试场景提供 stop 所需的准备、执行或清理逻辑。
   void stop() {
     if (stopped_) {
       return;
@@ -62,6 +67,7 @@ class RunningServer {
     }
   }
 
+// 辅助函数作用：为测试场景提供 port 所需的准备、执行或清理逻辑。
   std::uint16_t port() const {
     return server_->port();
   }
@@ -74,6 +80,7 @@ class RunningServer {
   bool stopped_{false};
 };
 
+// 辅助函数作用：为测试场景提供 connectTo 所需的准备、执行或清理逻辑。
 tcp::socket connectTo(const std::uint16_t port, asio::io_context& io_context) {
   tcp::socket socket(io_context);
   socket.connect(
@@ -81,6 +88,7 @@ tcp::socket connectTo(const std::uint16_t port, asio::io_context& io_context) {
   return socket;
 }
 
+// 辅助函数作用：为测试场景提供 sendCompleteRequest 所需的准备、执行或清理逻辑。
 beast_http::response<beast_http::string_body> sendCompleteRequest(
     const std::uint16_t port,
     const std::string& target,
@@ -100,6 +108,7 @@ beast_http::response<beast_http::string_body> sendCompleteRequest(
   return response;
 }
 
+// 辅助函数作用：为测试场景提供 waitForPeerClose 所需的准备、执行或清理逻辑。
 bool waitForPeerClose(
     tcp::socket& socket,
     const std::chrono::milliseconds timeout) {
@@ -127,6 +136,7 @@ bool waitForPeerClose(
   return false;
 }
 
+// 测试目的：验证 HttpServer.PartialHeaderTimesOutAndClosesConnection 场景的行为、状态变化和边界条件。
 TEST(HttpServer, PartialHeaderTimesOutAndClosesConnection) {
   RunningServer server;
   asio::io_context client_io;
@@ -139,6 +149,7 @@ TEST(HttpServer, PartialHeaderTimesOutAndClosesConnection) {
   EXPECT_TRUE(waitForPeerClose(socket, std::chrono::milliseconds(1000)));
 }
 
+// 测试目的：验证 HttpServer.PartialClientDoesNotBlockAnotherRequest 场景的行为、状态变化和边界条件。
 TEST(HttpServer, PartialClientDoesNotBlockAnotherRequest) {
   RunningServer server(std::chrono::milliseconds(500));
   asio::io_context client_io;
@@ -154,6 +165,7 @@ TEST(HttpServer, PartialClientDoesNotBlockAnotherRequest) {
   EXPECT_EQ(response.body(), "1");
 }
 
+// 测试目的：验证 HttpServer.PostResponseAdvertisesPostCorsMethod 场景的行为、状态变化和边界条件。
 TEST(HttpServer, PostResponseAdvertisesPostCorsMethod) {
   RunningServer server;
 
@@ -166,6 +178,7 @@ TEST(HttpServer, PostResponseAdvertisesPostCorsMethod) {
   EXPECT_NE(methods.find("POST"), beast::string_view::npos);
 }
 
+// 测试目的：验证 HttpServer.StopClosesActiveSessionAndReturns 场景的行为、状态变化和边界条件。
 TEST(HttpServer, StopClosesActiveSessionAndReturns) {
   RunningServer server(std::chrono::seconds(5));
   asio::io_context client_io;
@@ -181,6 +194,7 @@ TEST(HttpServer, StopClosesActiveSessionAndReturns) {
   EXPECT_LT(elapsed, std::chrono::seconds(2));
 }
 
+// 测试目的：验证 HttpServer.PortConflictThrowsDuringConstruction 场景的行为、状态变化和边界条件。
 TEST(HttpServer, PortConflictThrowsDuringConstruction) {
   asio::io_context first_io;
   auto first = std::make_shared<cleanbot::http::HttpServer>(

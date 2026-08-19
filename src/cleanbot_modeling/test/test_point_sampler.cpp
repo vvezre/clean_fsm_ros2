@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -6,6 +7,7 @@
 
 namespace {
 
+// 辅助函数作用：为测试场景提供 stable_samples 所需的准备、执行或清理逻辑。
 std::vector<cleanbot::modeling::RtkSample> stable_samples() {
   std::vector<cleanbot::modeling::RtkSample> samples(10u);
   for (std::size_t index = 0u; index < samples.size(); ++index) {
@@ -23,6 +25,7 @@ std::vector<cleanbot::modeling::RtkSample> stable_samples() {
   return samples;
 }
 
+// 测试目的：验证 PointSampler.ProducesMeanForStableFixedSamples 场景的行为、状态变化和边界条件。
 TEST(PointSampler, ProducesMeanForStableFixedSamples) {
   const auto result =
       cleanbot::modeling::sample_point(stable_samples(), 10u, 0.05);
@@ -33,6 +36,7 @@ TEST(PointSampler, ProducesMeanForStableFixedSamples) {
   EXPECT_LT(result.point.sample_radius_m, 0.05);
 }
 
+// 测试目的：验证 PointSampler.RejectsUnstableSamples 场景的行为、状态变化和边界条件。
 TEST(PointSampler, RejectsUnstableSamples) {
   auto samples = stable_samples();
   samples.back().lat += 1e-6;

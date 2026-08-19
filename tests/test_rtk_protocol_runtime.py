@@ -1,3 +1,4 @@
+# 文件作用：验证 rtk protocol runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -36,6 +37,7 @@ cppyy.cppdef(
 )
 
 
+# 辅助方法：为 byte_vector 测试场景准备输入、执行操作或整理结果。
 def byte_vector(data):
     vector = cppyy.gbl.std.vector["unsigned char"]()
     for value in data:
@@ -43,6 +45,7 @@ def byte_vector(data):
     return vector
 
 
+# 辅助方法：为 nmea 测试场景准备输入、执行操作或整理结果。
 def nmea(body):
     checksum = 0
     for value in body.encode("ascii"):
@@ -51,6 +54,7 @@ def nmea(body):
 
 
 class RtkProtocolRuntimeTest(unittest.TestCase):
+    # 测试作用：验证“line_buffer_reassembles_split_nmea”场景的契约、输出结果和边界行为。
     def test_line_buffer_reassembles_split_nmea(self):
         buffer = cppyy.gbl.cleanbot.rtk.NmeaLineBuffer(128)
         line = cppyy.gbl.std.string()
@@ -62,6 +66,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertTrue(buffer.pop(line))
         self.assertEqual(str(line), "$GNGGA,123519,1,2*00")
 
+    # 测试作用：验证“line_buffer_extracts_sticky_lines_and_discards_noise”场景的契约、输出结果和边界行为。
     def test_line_buffer_extracts_sticky_lines_and_discards_noise(self):
         buffer = cppyy.gbl.cleanbot.rtk.NmeaLineBuffer(256)
         line = cppyy.gbl.std.string()
@@ -75,11 +80,13 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertEqual(str(line), "$GPHPR,2,90.0,0.0*00")
         self.assertFalse(buffer.pop(line))
 
+    # 测试作用：验证“line_buffer_keeps_memory_bounded”场景的契约、输出结果和边界行为。
     def test_line_buffer_keeps_memory_bounded(self):
         buffer = cppyy.gbl.cleanbot.rtk.NmeaLineBuffer(32)
         buffer.append(byte_vector(b"x" * 100))
         self.assertLessEqual(buffer.size(), 32)
 
+    # 测试作用：验证“parser_accepts_fixed_and_float_gga”场景的契约、输出结果和边界行为。
     def test_parser_accepts_fixed_and_float_gga(self):
         parser = cppyy.gbl.cleanbot.rtk.NmeaParser()
         fixed = parser.parse_gga(nmea(
@@ -100,6 +107,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertTrue(floating.parsed)
         self.assertEqual(floating.data.fix_quality, 5)
 
+    # 测试作用：验证“parser_keeps_quality_zero_coordinates_invalid”场景的契约、输出结果和边界行为。
     def test_parser_keeps_quality_zero_coordinates_invalid(self):
         parser = cppyy.gbl.cleanbot.rtk.NmeaParser()
         invalid = parser.parse_gga(nmea(
@@ -111,6 +119,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertEqual(invalid.data.fix_quality, 0)
         self.assertFalse(invalid.data.position_valid)
 
+    # 测试作用：验证“parser_parses_hpr_and_ths_heading”场景的契约、输出结果和边界行为。
     def test_parser_parses_hpr_and_ths_heading(self):
         parser = cppyy.gbl.cleanbot.rtk.NmeaParser()
         hpr = parser.parse_heading(nmea(
@@ -125,6 +134,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertTrue(ths.parsed)
         self.assertAlmostEqual(ths.data.heading_deg, 180.0)
 
+    # 测试作用：验证“parser_rejects_bad_checksum_and_out_of_range_coordinate”场景的契约、输出结果和边界行为。
     def test_parser_rejects_bad_checksum_and_out_of_range_coordinate(self):
         parser = cppyy.gbl.cleanbot.rtk.NmeaParser()
         bad_checksum = parser.parse_gga(
@@ -139,6 +149,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertFalse(bad_latitude.parsed)
         self.assertEqual(bad_latitude.error, "gga_coordinate_invalid")
 
+    # 测试作用：验证“synchronizer_pairs_gga_and_hpr_by_gnss_utc”场景的契约、输出结果和边界行为。
     def test_synchronizer_pairs_gga_and_hpr_by_gnss_utc(self):
         parser = cppyy.gbl.cleanbot.rtk.NmeaParser()
         sync = cppyy.gbl.cleanbot.rtk.RtkSampleSynchronizer(0.5, 2.0, 0.5)
@@ -158,6 +169,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertAlmostEqual(result.sample.heading_deg, 90.0)
         self.assertEqual(result.sample.gga.fix_quality, 4)
 
+    # 测试作用：验证“synchronizer_expires_old_heading_without_using_host_utc”场景的契约、输出结果和边界行为。
     def test_synchronizer_expires_old_heading_without_using_host_utc(self):
         parser = cppyy.gbl.cleanbot.rtk.NmeaParser()
         sync = cppyy.gbl.cleanbot.rtk.RtkSampleSynchronizer(0.5, 2.0, 0.5)
@@ -184,6 +196,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertFalse(older_gnss_time.stale)
         self.assertFalse(older_gnss_time.sample.heading_valid)
 
+    # 测试作用：验证“synchronizer_handles_midnight_utc_wrap”场景的契约、输出结果和边界行为。
     def test_synchronizer_handles_midnight_utc_wrap(self):
         heading = cppyy.gbl.cleanbot.rtk.HeadingData()
         heading.utc_seconds = 86399.8
@@ -199,6 +212,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertTrue(result.produced)
         self.assertTrue(result.sample.heading_valid)
 
+    # 测试作用：验证“fixed_validity_requires_connected_fresh_fixed_vehicle_center”场景的契约、输出结果和边界行为。
     def test_fixed_validity_requires_connected_fresh_fixed_vehicle_center(self):
         value = cppyy.gbl.cleanbot.rtk.RtkValidityInput()
         value.serial_connected = True
@@ -228,6 +242,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
             )
             setattr(value, field, original)
 
+    # 测试作用：验证“freshness_heartbeat_only_publishes_for_missing_disconnected_or_stale_data”场景的契约、输出结果和边界行为。
     def test_freshness_heartbeat_only_publishes_for_missing_disconnected_or_stale_data(self):
         should_publish = cppyy.gbl.cleanbot.rtk.should_publish_freshness_heartbeat
 
@@ -236,6 +251,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertFalse(should_publish(True, True, 0.1, 2.0))
         self.assertTrue(should_publish(True, True, 2.1, 2.0))
 
+    # 测试作用：验证“vehicle_center_transform_matches_python_golden_points”场景的契约、输出结果和边界行为。
     def test_vehicle_center_transform_matches_python_golden_points(self):
         transform = cppyy.gbl.cleanbot.rtk.VehicleCenterTransform()
         expected = {
@@ -252,11 +268,13 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
             self.assertAlmostEqual(result.lat, point[0], places=8)
             self.assertAlmostEqual(result.lon, point[1], places=8)
 
+    # 测试作用：验证“vehicle_center_transform_rejects_invalid_heading”场景的契约、输出结果和边界行为。
     def test_vehicle_center_transform_rejects_invalid_heading(self):
         transform = cppyy.gbl.cleanbot.rtk.VehicleCenterTransform()
         result = transform.compute(12.0, 98.0, float("nan"), 0.10, 0.18)
         self.assertFalse(result.valid)
 
+    # 测试作用：验证“ntrip_request_contains_mountpoint_and_basic_auth”场景的契约、输出结果和边界行为。
     def test_ntrip_request_contains_mountpoint_and_basic_auth(self):
         config = cppyy.gbl.cleanbot.rtk.NtripConfig()
         config.host = "caster.example"
@@ -271,6 +289,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertIn("Authorization: Basic dXNlcjpwYXNz\r\n", request)
         self.assertNotIn("user:pass", request)
 
+    # 测试作用：验证“ntrip_response_preserves_rtcm_after_header”场景的契约、输出结果和边界行为。
     def test_ntrip_response_preserves_rtcm_after_header(self):
         parser = cppyy.gbl.cleanbot.rtk.NtripResponseParser(1024)
         first = parser.append(byte_vector(b"ICY 200 OK\r\nServer: caster\r\n"))
@@ -282,6 +301,7 @@ class RtkProtocolRuntimeTest(unittest.TestCase):
         self.assertTrue(second.accepted)
         self.assertEqual([ord(value) for value in second.rtcm_bytes], [0xD3, 0x00, 0x13, 0x01, 0x02])
 
+    # 测试作用：验证“ntrip_response_rejects_non_200_and_oversized_header”场景的契约、输出结果和边界行为。
     def test_ntrip_response_rejects_non_200_and_oversized_header(self):
         rejected = cppyy.gbl.cleanbot.rtk.NtripResponseParser(1024).append(
             byte_vector(b"HTTP/1.0 401 Unauthorized\r\n\r\n")

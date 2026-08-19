@@ -1,3 +1,4 @@
+# 文件作用：验证 workspace contract 相关契约、运行逻辑和边界条件。
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -8,6 +9,7 @@ SRC = WORKSPACE / "src"
 
 
 class WorkspaceContractTest(unittest.TestCase):
+    # 测试作用：验证“bringup_starts_lower_machine_gateway_with_registry_config”场景的契约、输出结果和边界行为。
     def test_bringup_starts_lower_machine_gateway_with_registry_config(self):
         launch_source = (
             SRC / "cleanbot_bringup" / "launch" / "cleanbot.launch.py"
@@ -21,9 +23,9 @@ class WorkspaceContractTest(unittest.TestCase):
         self.assertIn("system.yaml", launch_source)
         self.assertIn("hardware.lower_machine_port", config_source)
         self.assertIn("hardware.lower_machine_baudrate", config_source)
-        self.assertIn('"hardware.command_ack_timeout_ms", "200"', config_source)
-        self.assertIn('"hardware.command_max_retries", "3"', config_source)
+        self.assertIn('"hardware.command_repeat_count", "5"', config_source)
 
+    # 测试作用：验证“bringup_starts_rtk_gateway_with_center_offset_and_ntrip_config”场景的契约、输出结果和边界行为。
     def test_bringup_starts_rtk_gateway_with_center_offset_and_ntrip_config(self):
         launch_source = (
             SRC / "cleanbot_bringup" / "launch" / "cleanbot.launch.py"
@@ -52,6 +54,7 @@ class WorkspaceContractTest(unittest.TestCase):
         ):
             self.assertIn(parameter, config_source)
 
+    # 测试作用：验证“bringup_starts_tracking_and_command_arbiter”场景的契约、输出结果和边界行为。
     def test_bringup_starts_tracking_and_command_arbiter(self):
         launch_source = (
             SRC / "cleanbot_bringup/launch/cleanbot.launch.py"
@@ -77,6 +80,7 @@ class WorkspaceContractTest(unittest.TestCase):
         ):
             self.assertIn(parameter, config_source)
 
+    # 测试作用：验证“bringup_starts_cpp_http_control_gateway”场景的契约、输出结果和边界行为。
     def test_bringup_starts_cpp_http_control_gateway(self):
         launch_source = (
             SRC / "cleanbot_bringup/launch/cleanbot.launch.py"
@@ -101,6 +105,7 @@ class WorkspaceContractTest(unittest.TestCase):
         self.assertIn("<exec_depend>cleanbot_http</exec_depend>", package_source)
         self.assertNotIn("<exec_depend>cleanbot_gateway</exec_depend>", package_source)
 
+    # 测试作用：验证“bringup_starts_stage_five_mission_manager”场景的契约、输出结果和边界行为。
     def test_bringup_starts_stage_five_mission_manager(self):
         launch_source = (
             SRC / "cleanbot_bringup/launch/cleanbot.launch.py"
@@ -131,6 +136,7 @@ class WorkspaceContractTest(unittest.TestCase):
             self.assertIn(parameter, config_source)
         self.assertIn("<exec_depend>cleanbot_mission</exec_depend>", package_source)
 
+    # 测试作用：验证“stage_one_packages_and_build_scripts_exist”场景的契约、输出结果和边界行为。
     def test_stage_one_packages_and_build_scripts_exist(self):
         required = [
             WORKSPACE / "scripts" / "build_humble.sh",
@@ -147,6 +153,7 @@ class WorkspaceContractTest(unittest.TestCase):
         missing = [str(path.relative_to(WORKSPACE)) for path in required if not path.is_file()]
         self.assertEqual(missing, [], "missing stage-one files: {}".format(missing))
 
+    # 测试作用：验证“humble_setup_is_sourced_without_nounset”场景的契约、输出结果和边界行为。
     def test_humble_setup_is_sourced_without_nounset(self):
         script = (WORKSPACE / "scripts" / "build_humble.sh").read_text(encoding="utf-8")
         disable_nounset = script.index("set +u")
@@ -155,6 +162,7 @@ class WorkspaceContractTest(unittest.TestCase):
         self.assertLess(disable_nounset, source_humble)
         self.assertLess(source_humble, enable_nounset)
 
+    # 测试作用：验证“package_metadata_targets_ament_cmake”场景的契约、输出结果和边界行为。
     def test_package_metadata_targets_ament_cmake(self):
         package_names = (
             "cleanbot_interfaces",
@@ -171,6 +179,7 @@ class WorkspaceContractTest(unittest.TestCase):
             self.assertIsNotNone(build_type)
             self.assertEqual(build_type.text, "ament_cmake")
 
+    # 测试作用：验证“interface_contract_contains_required_files”场景的契约、输出结果和边界行为。
     def test_interface_contract_contains_required_files(self):
         required = {
             "msg/BrushCommand.msg",
@@ -286,12 +295,14 @@ class WorkspaceContractTest(unittest.TestCase):
             sections = (package_root / action).read_text(encoding="utf-8").split("---")
             self.assertEqual(len(sections), 3, "{} must define goal/result/feedback".format(action))
 
+    # 测试作用：验证“common_package_enforces_cpp17_and_gtest”场景的契约、输出结果和边界行为。
     def test_common_package_enforces_cpp17_and_gtest(self):
         cmake_text = (SRC / "cleanbot_common" / "CMakeLists.txt").read_text(encoding="utf-8")
         self.assertIn("CXX_STANDARD 17", cmake_text)
         self.assertIn("ament_add_gtest", cmake_text)
         self.assertIn("BUILD_TESTING", cmake_text)
 
+    # 测试作用：验证“hardware_status_exposes_frame_and_signed_speed_diagnostics”场景的契约、输出结果和边界行为。
     def test_hardware_status_exposes_frame_and_signed_speed_diagnostics(self):
         message = (
             SRC / "cleanbot_interfaces" / "msg" / "HardwareStatus.msg"
@@ -309,6 +320,7 @@ class WorkspaceContractTest(unittest.TestCase):
         for field in required_fields:
             self.assertIn(field, message)
 
+    # 测试作用：验证“no_redis_dependency_is_introduced”场景的契约、输出结果和边界行为。
     def test_no_redis_dependency_is_introduced(self):
         forbidden = []
         for path in SRC.rglob("*"):

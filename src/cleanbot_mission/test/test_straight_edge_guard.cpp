@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <limits>
 
 #include "cleanbot_mission/straight_edge_guard.hpp"
@@ -8,6 +9,7 @@ namespace {
 using cleanbot::mission::StraightEdgeDecision;
 using cleanbot::mission::StraightEdgeGuard;
 
+// 测试目的：验证 StraightEdgeGuard.IgnoresPulseShorterThanDebounce 场景的行为、状态变化和边界条件。
 TEST(StraightEdgeGuard, IgnoresPulseShorterThanDebounce) {
   StraightEdgeGuard guard(200u, 0.10);
 
@@ -22,6 +24,7 @@ TEST(StraightEdgeGuard, IgnoresPulseShorterThanDebounce) {
       StraightEdgeDecision::kNone);
 }
 
+// 测试目的：验证 StraightEdgeGuard.AcceptsEdgeInsideTargetTolerance 场景的行为、状态变化和边界条件。
 TEST(StraightEdgeGuard, AcceptsEdgeInsideTargetTolerance) {
   StraightEdgeGuard guard(200u, 0.10);
 
@@ -33,6 +36,7 @@ TEST(StraightEdgeGuard, AcceptsEdgeInsideTargetTolerance) {
       StraightEdgeDecision::kTargetReached);
 }
 
+// 测试目的：验证 StraightEdgeGuard.AcceptsEdgeAfterPassingTargetProjection 场景的行为、状态变化和边界条件。
 TEST(StraightEdgeGuard, AcceptsEdgeAfterPassingTargetProjection) {
   StraightEdgeGuard guard(200u, 0.10);
 
@@ -44,6 +48,7 @@ TEST(StraightEdgeGuard, AcceptsEdgeAfterPassingTargetProjection) {
       StraightEdgeDecision::kTargetReached);
 }
 
+// 测试目的：验证 StraightEdgeGuard.RequestsConfirmationBeforeTarget 场景的行为、状态变化和边界条件。
 TEST(StraightEdgeGuard, RequestsConfirmationBeforeTarget) {
   StraightEdgeGuard guard(200u, 0.10);
 
@@ -58,6 +63,7 @@ TEST(StraightEdgeGuard, RequestsConfirmationBeforeTarget) {
       StraightEdgeDecision::kNone);
 }
 
+// 测试目的：验证 StraightEdgeGuard.ClearSignalRearmsAfterAConfirmedEdge 场景的行为、状态变化和边界条件。
 TEST(StraightEdgeGuard, ClearSignalRearmsAfterAConfirmedEdge) {
   StraightEdgeGuard guard(200u, 0.10);
 
@@ -76,6 +82,7 @@ TEST(StraightEdgeGuard, ClearSignalRearmsAfterAConfirmedEdge) {
       StraightEdgeDecision::kTargetReached);
 }
 
+// 测试目的：验证 StraightEdgeGuard.MissingTrackingMetricsRequireConfirmation 场景的行为、状态变化和边界条件。
 TEST(StraightEdgeGuard, MissingTrackingMetricsRequireConfirmation) {
   StraightEdgeGuard guard(200u, 0.10);
   const double missing = std::numeric_limits<double>::quiet_NaN();

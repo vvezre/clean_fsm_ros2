@@ -1,3 +1,4 @@
+# 文件作用：定义批量写入配置项并返回修订号的服务接口。
 cleanbot_interfaces/ConfigEntry[] entries
 string updated_by
 ---

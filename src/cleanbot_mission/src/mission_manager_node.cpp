@@ -75,6 +75,7 @@ class MissionManagerNode : public rclcpp::Node {
       cleanbot_interfaces::msg::CommandExecutionStatus;
   using MaintenanceState = cleanbot_interfaces::msg::MaintenanceState;
 
+  // 构造任务管理节点，创建动作、服务、状态订阅及维护运行时组件。
   MissionManagerNode()
       : Node("mission_manager_node"),
         maintenance_runtime_(
@@ -230,6 +231,7 @@ class MissionManagerNode : public rclcpp::Node {
             "mission.checkpoint_path",
         },
         false,
+        // 配置回调作用：接收最新配置快照，并刷新本节点对应的运行参数。
         [this](const config::ConfigSnapshot& snapshot, const bool initial) {
           configure(snapshot, initial);
         });
@@ -237,6 +239,7 @@ class MissionManagerNode : public rclcpp::Node {
     RCLCPP_INFO(get_logger(), "mission manager waiting for configuration");
   }
 
+  // 析构节点时通知执行线程退出并等待回收，防止任务线程悬空。
   ~MissionManagerNode() override {
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -276,6 +279,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
+  // 接受清扫任务取消请求并唤醒执行线程，使其尽快进入安全停止流程。
   rclcpp_action::CancelResponse onCancel(
       const std::shared_ptr<GoalHandle>) {
     condition_.notify_all();
@@ -344,6 +348,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
+  // 接受多路点任务取消请求并通知正在等待的执行线程。
   rclcpp_action::CancelResponse onWaypointCancel(
       const std::shared_ptr<WaypointGoalHandle>) {
     condition_.notify_all();
@@ -409,6 +414,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
+  // 接受返航任务取消请求并唤醒返航执行线程。
   rclcpp_action::CancelResponse onReturnHomeCancel(
       const std::shared_ptr<ReturnHomeGoalHandle>) {
     condition_.notify_all();
@@ -484,6 +490,7 @@ class MissionManagerNode : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
+  // 接受恢复任务取消请求并唤醒恢复执行线程。
   rclcpp_action::CancelResponse onRecoverCancel(
       const std::shared_ptr<RecoverGoalHandle>) {
     condition_.notify_all();
@@ -556,6 +563,7 @@ class MissionManagerNode : public rclcpp::Node {
     condition_.notify_all();
   }
 
+  // 在持锁状态下检查维护门是否关闭任务准入，并记录被拒绝的动作类型。
   bool maintenanceAdmissionClosedLocked(const char* const action) {
     if (!maintenance_runtime_.admissionClosed()) {
       return false;
@@ -570,6 +578,7 @@ class MissionManagerNode : public rclcpp::Node {
     return true;
   }
 
+  // 处理维护模式启停请求，更新持久状态并发布最新维护快照。
   void onSetMaintenance(
       const std::shared_ptr<
           cleanbot_interfaces::srv::SetMaintenanceMode::Request> request,
@@ -614,6 +623,7 @@ class MissionManagerNode : public rclcpp::Node {
     publishMaintenanceState(maintenance_snapshot);
   }
 
+  // 缓存最新 RTK 定位及接收时间，并唤醒等待定位就绪的任务步骤。
   void onRtkFix(const cleanbot_interfaces::msg::RtkFix::SharedPtr fix) {
     std::lock_guard<std::mutex> lock(mutex_);
     latest_rtk_ = *fix;
@@ -1027,6 +1037,7 @@ class MissionManagerNode : public rclcpp::Node {
         goal_handle, result, final_step, completed_waypoints);
   }
 
+  // 将车辆重新定位到未完成路径段的起点，供断点恢复流程复用。
   template <typename GoalHandleT>
   StepResult repositionToPoint(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1481,6 +1492,7 @@ class MissionManagerNode : public rclcpp::Node {
         goal_handle, machine, result, final_step, checkpoint.mission_kind);
   }
 
+  // 等待配置、硬件和 RTK 同时就绪；取消或超时则返回对应步骤结果。
   template <typename GoalHandleT>
   StepResult waitForPreflight(
       const std::shared_ptr<GoalHandleT>& goal_handle) {
@@ -1508,6 +1520,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kCancelled;
   }
 
+  // 在任务步骤执行前统一检查取消、故障、暂停和定位状态。
   template <typename GoalHandleT>
   StepResult ensureOperational(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1541,6 +1554,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kSuccess;
   }
 
+  // 在用户暂停期间保持车辆安全停止，恢复后要求当前步骤重新开始。
   template <typename GoalHandleT>
   StepResult waitWhilePaused(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1557,6 +1571,7 @@ class MissionManagerNode : public rclcpp::Node {
     publishFeedback(goal_handle, machine, current_loop, total_loops, "PAUSED", reason);
 
     std::unique_lock<std::mutex> lock(mutex_);
+    // 等待谓词作用：判断取消、故障、状态更新或恢复条件是否已经满足。
     condition_.wait(lock, [this, &goal_handle]() {
       return shutting_down_ || !rclcpp::ok() || goal_handle->is_canceling() ||
           !pause_requested_ || !fault_code_.empty();
@@ -1578,6 +1593,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kRestart;
   }
 
+  // 等待用户确认直行边缘风险；确认后允许重新执行当前跟踪段。
   template <typename GoalHandleT>
   StepResult waitForEdgeConfirmation(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1609,6 +1625,7 @@ class MissionManagerNode : public rclcpp::Node {
         "未到目标点发生持续触边，车辆已停车并关闭滚刷，请人工确认是否继续");
 
     std::unique_lock<std::mutex> lock(mutex_);
+    // 等待谓词作用：判断取消、故障、状态更新或恢复条件是否已经满足。
     condition_.wait(lock, [this, &goal_handle]() {
       return shutting_down_ || !rclcpp::ok() || goal_handle->is_canceling() ||
           !pause_requested_ || !fault_code_.empty();
@@ -1639,6 +1656,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kRestart;
   }
 
+  // RTK 失效时安全等待定位恢复，超时或取消时终止当前任务步骤。
   template <typename GoalHandleT>
   StepResult waitForRtkRecovery(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1699,6 +1717,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kCancelled;
   }
 
+  // 下发有限转向命令并等待下位机完成事件，同时维持任务租约心跳。
   template <typename GoalHandleT>
   StepResult executeTurn(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1735,6 +1754,7 @@ class MissionManagerNode : public rclcpp::Node {
       bool received = false;
       {
         std::unique_lock<std::mutex> lock(mutex_);
+        // 等待谓词作用：判断取消、故障、状态更新或恢复条件是否已经满足。
         condition_.wait_until(lock, std::min(deadline, next_heartbeat), [this]() {
           return shutting_down_ || turn_status_received_ || pause_requested_ ||
               !fault_code_.empty() || !rtkReadyLocked();
@@ -1785,6 +1805,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kCancelled;
   }
 
+  // 发布直线跟踪目标并监控完成、阻塞、边缘确认及 RTK 恢复条件。
   template <typename GoalHandleT>
   StepResult executeTracking(
       const std::shared_ptr<GoalHandleT>& goal_handle,
@@ -1845,6 +1866,7 @@ class MissionManagerNode : public rclcpp::Node {
         double signed_remaining_m = std::numeric_limits<double>::quiet_NaN();
         {
           std::unique_lock<std::mutex> lock(mutex_);
+          // 等待谓词作用：判断取消、故障、状态更新或恢复条件是否已经满足。
           condition_.wait_for(lock, std::chrono::milliseconds(100), [this]() {
             return shutting_down_ || tracking_status_received_ || pause_requested_ ||
                 !fault_code_.empty() || !rtkReadyLocked();
@@ -1938,6 +1960,7 @@ class MissionManagerNode : public rclcpp::Node {
     return StepResult::kCancelled;
   }
 
+  // 结束清扫动作，发布停止输出并根据步骤结果回填动作结果和检查点。
   void finishAction(
       const std::shared_ptr<GoalHandle>& goal_handle,
       MissionStateMachine& machine,
@@ -2042,6 +2065,7 @@ class MissionManagerNode : public rclcpp::Node {
     condition_.notify_all();
   }
 
+  // 结束返航动作，清理控制输出并向动作客户端报告最终状态。
   void finishReturnHomeAction(
       const std::shared_ptr<ReturnHomeGoalHandle>& goal_handle,
       MissionStateMachine& machine,
@@ -2085,6 +2109,7 @@ class MissionManagerNode : public rclcpp::Node {
     resetRuntimeAfterWorker(result->code, result->message);
   }
 
+  // 结束断点恢复动作，停止车辆并报告被恢复的任务类型及结果。
   void finishRecoverAction(
       const std::shared_ptr<RecoverGoalHandle>& goal_handle,
       MissionStateMachine& machine,
@@ -2123,6 +2148,7 @@ class MissionManagerNode : public rclcpp::Node {
     resetRuntimeAfterWorker(result->code, result->message);
   }
 
+  // 将任务段的转角转换为有限转向车辆命令并发布到任务控制通道。
   void publishTurnCommand(
       const cleanbot_interfaces::msg::TaskSegment& segment,
       const std::uint64_t request_id,
@@ -2158,6 +2184,7 @@ class MissionManagerNode : public rclcpp::Node {
     tracking_target_publisher_->publish(target);
   }
 
+  // 发布失活的跟踪目标，解除指定代次或当前代次的路径跟踪控制。
   void publishTrackingRelease(const std::uint64_t generation = 0u) {
     cleanbot_interfaces::msg::TrackingTarget target;
     target.stamp = now();
@@ -2182,6 +2209,7 @@ class MissionManagerNode : public rclcpp::Node {
     mission_command_publisher_->publish(command);
   }
 
+  // 发布任务通道释放命令，让仲裁器撤销任务速度控制权。
   void publishMissionRelease() {
     VehicleCommand command;
     command.stamp = now();
@@ -2209,6 +2237,7 @@ class MissionManagerNode : public rclcpp::Node {
     safety_command_publisher_->publish(command);
   }
 
+  // 发布安全通道释放命令，撤销本节点先前施加的安全制动。
   void publishSafetyRelease() {
     VehicleCommand command;
     command.stamp = now();
@@ -2234,6 +2263,7 @@ class MissionManagerNode : public rclcpp::Node {
     publishBrush(cleaning, cleaning ? requested_speed : 0, true);
   }
 
+  // 发布滚刷开关和速度命令，并可选择把状态同步到车辆状态缓存。
   void publishBrush(
       const bool enabled,
       const std::int32_t speed,
@@ -2247,6 +2277,7 @@ class MissionManagerNode : public rclcpp::Node {
     brush_publisher_->publish(command);
   }
 
+  // 集中发布跟踪释放、滚刷停止和制动输出，确保任务结束时车辆静止。
   void publishStoppedOutputs(const std::string& source, const bool safety) {
     publishTrackingRelease();
     publishBrush(false, 0, false);
@@ -2256,6 +2287,7 @@ class MissionManagerNode : public rclcpp::Node {
     }
   }
 
+  // 发布清扫动作反馈，报告状态机阶段、循环和已完成任务段数量。
   void publishFeedback(
       const std::shared_ptr<GoalHandle>& goal_handle,
       const MissionStateMachine& machine,
@@ -2290,6 +2322,7 @@ class MissionManagerNode : public rclcpp::Node {
     goal_handle->publish_feedback(feedback);
   }
 
+  // 发布多路点动作反馈，并同步当前路点和循环进度到周期状态。
   void publishFeedback(
       const std::shared_ptr<WaypointGoalHandle>& goal_handle,
       const MissionStateMachine&,
@@ -2308,6 +2341,7 @@ class MissionManagerNode : public rclcpp::Node {
     publishWaypointFeedback(goal_handle, state);
   }
 
+  // 发布返航动作反馈，包含状态机阶段和剩余距离。
   void publishFeedback(
       const std::shared_ptr<ReturnHomeGoalHandle>& goal_handle,
       const MissionStateMachine& machine,
@@ -2334,6 +2368,7 @@ class MissionManagerNode : public rclcpp::Node {
     goal_handle->publish_feedback(feedback);
   }
 
+  // 发布恢复动作反馈，说明当前恢复阶段和检查点执行进度。
   void publishFeedback(
       const std::shared_ptr<RecoverGoalHandle>& goal_handle,
       const MissionStateMachine& machine,
@@ -2368,6 +2403,7 @@ class MissionManagerNode : public rclcpp::Node {
     goal_handle->publish_feedback(feedback);
   }
 
+  // 根据当前路点运行态构造并发布多路点动作的详细反馈。
   void publishWaypointFeedback(
       const std::shared_ptr<WaypointGoalHandle>& goal_handle,
       const std::string& state) {
@@ -2388,6 +2424,7 @@ class MissionManagerNode : public rclcpp::Node {
     goal_handle->publish_feedback(feedback);
   }
 
+  // 在持锁状态下判断 RTK 解、车辆中心、航向和数据新鲜度是否可用。
   bool rtkReadyLocked() const {
     if (!has_rtk_ || !latest_rtk_.fixed_valid || !latest_rtk_.center_valid ||
         !latest_rtk_.heading_valid) {
@@ -2396,6 +2433,7 @@ class MissionManagerNode : public rclcpp::Node {
     return ageSeconds(latest_rtk_at_) <= rtk_freshness_timeout_sec_;
   }
 
+  // 在持锁状态下判断下位机连接、电量和状态新鲜度是否满足任务条件。
   bool hardwareReadyLocked() const {
     if (!has_hardware_ || !latest_hardware_.connected ||
         isLowBattery(latest_hardware_)) {
@@ -2404,6 +2442,7 @@ class MissionManagerNode : public rclcpp::Node {
     return ageSeconds(latest_hardware_at_) <= hardware_freshness_timeout_sec_;
   }
 
+  // 将内部维护运行时快照转换为 ROS2 消息并发布。
   void publishMaintenanceState(
       const MaintenanceRuntimeSnapshot& snapshot) {
     MaintenanceState message;
@@ -2424,6 +2463,7 @@ class MissionManagerNode : public rclcpp::Node {
     maintenance_state_publisher_->publish(message);
   }
 
+  // 定时刷新维护健康度和车辆状态，向其他节点发布统一运行快照。
   void publishPeriodicState() {
     VehicleStateInput input;
     MaintenanceRuntimeSnapshot maintenance_snapshot;
@@ -2480,6 +2520,7 @@ class MissionManagerNode : public rclcpp::Node {
     vehicle_state_publisher_->publish(message);
   }
 
+  // 按配置阈值判断硬件电量是否低于安全任务要求。
   bool isLowBattery(
       const cleanbot_interfaces::msg::HardwareStatus& hardware) const {
     return low_battery_threshold_percent_ > 0.0 &&
@@ -2487,6 +2528,7 @@ class MissionManagerNode : public rclcpp::Node {
         hardware.battery_percent <= low_battery_threshold_percent_;
   }
 
+  // 计算稳态时钟时间点距当前时刻的秒数；无效时间点返回无穷大。
   static double ageSeconds(
       const std::chrono::steady_clock::time_point& received_at) {
     if (received_at == std::chrono::steady_clock::time_point{}) {
@@ -2496,23 +2538,27 @@ class MissionManagerNode : public rclcpp::Node {
         std::chrono::steady_clock::now() - received_at).count();
   }
 
+  // 返回稳态时钟的毫秒计数，用于防回拨的运行时判定。
   static std::uint64_t monotonicMilliseconds() {
     return static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch()).count());
   }
 
+  // 返回稳态时钟的纳秒计数，用于维护证据排序和新鲜度计算。
   static std::uint64_t monotonicNanoseconds() {
     return static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now().time_since_epoch()).count());
   }
 
+  // 返回系统时钟 Unix 毫秒值，用于持久化检查点时间戳。
   static std::int64_t wallClockMilliseconds() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
   }
 
+  // 执行线程结束后重置任务运行态，并保存终止状态和说明。
   void resetRuntimeAfterWorker(
       const std::string& terminal_state,
       const std::string& terminal_message) {
@@ -2533,12 +2579,14 @@ class MissionManagerNode : public rclcpp::Node {
     condition_.notify_all();
   }
 
+  // 使用动作类型、ROS 时间和请求序号生成唯一任务运行标识。
   std::string makeRunId(const std::string& prefix) {
     std::ostringstream stream;
     stream << prefix << "-" << now().nanoseconds() << "-" << nextRequestId();
     return stream.str();
   }
 
+  // 按任务类型选择对应检查点仓库；不支持的类型返回空指针。
   MissionCheckpointStore* checkpointStoreForKind(const std::string& mission_kind) const {
     if (mission_kind == "cleaning") {
       return cleaning_checkpoint_store_.get();
@@ -2629,24 +2677,28 @@ class MissionManagerNode : public rclcpp::Node {
     }
   }
 
+  // 清除正在等待的转向请求标识和接收状态。
   void clearExpectedTurn() {
     std::lock_guard<std::mutex> lock(mutex_);
     expected_turn_request_id_ = 0u;
     turn_status_received_ = false;
   }
 
+  // 清除正在等待的跟踪代次和接收状态。
   void clearExpectedTracking() {
     std::lock_guard<std::mutex> lock(mutex_);
     expected_tracking_generation_ = 0u;
     tracking_status_received_ = false;
   }
 
+  // 在获取互斥锁后记录首个任务故障，并唤醒等待线程。
   void setFault(const std::string& code, const std::string& message) {
     std::lock_guard<std::mutex> lock(mutex_);
     setFaultLocked(code, message);
     condition_.notify_all();
   }
 
+  // 在调用方已持锁时记录首个故障，避免后续故障覆盖根因。
   void setFaultLocked(const std::string& code, const std::string& message) {
     if (fault_code_.empty()) {
       fault_code_ = code;
@@ -2654,16 +2706,19 @@ class MissionManagerNode : public rclcpp::Node {
     }
   }
 
+  // 线程安全地分配下一个车辆命令请求标识。
   std::uint64_t nextRequestId() {
     std::lock_guard<std::mutex> lock(id_mutex_);
     return next_request_id_++;
   }
 
+  // 线程安全地分配下一个路径跟踪代次编号。
   std::uint64_t nextTrackingGeneration() {
     std::lock_guard<std::mutex> lock(id_mutex_);
     return next_tracking_generation_++;
   }
 
+  // 从配置快照装载任务超时、阈值和检查点路径，并重建相关运行组件。
   void configure(const config::ConfigSnapshot& snapshot, const bool initial) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!initial && configured_) {
@@ -2794,6 +2849,7 @@ class MissionManagerNode : public rclcpp::Node {
 }  // namespace mission
 }  // namespace cleanbot
 
+// 程序入口：初始化 ROS2，运行任务管理节点并在退出时清理上下文。
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<cleanbot::mission::MissionManagerNode>());

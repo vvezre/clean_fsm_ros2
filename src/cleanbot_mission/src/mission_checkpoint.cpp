@@ -1,3 +1,7 @@
+/*
+ * 文件作用：任务检查点实现：保存和恢复任务执行位置及相关状态。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_mission/mission_checkpoint.hpp"
 
 #include <chrono>
@@ -28,11 +32,13 @@ namespace {
 
 using Json = nlohmann::json;
 
+// 判断经纬度是否为有限数且位于合法地理范围内。
 bool valid_coordinate(const double lat, const double lon) {
   return std::isfinite(lat) && std::isfinite(lon) &&
       lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0;
 }
 
+// 在调用方提供错误缓冲区时写入说明，并统一返回失败。
 bool set_error(std::string* error, const std::string& message) {
   if (error != nullptr) {
     *error = message;
@@ -40,6 +46,7 @@ bool set_error(std::string* error, const std::string& message) {
   return false;
 }
 
+// 校验检查点标识、任务类型、进度范围以及全部几何数据。
 bool validate_record(const MissionCheckpointRecord& record, std::string* error) {
   if (record.run_id.empty()) {
     return set_error(error, "checkpoint run_id is empty");
@@ -93,6 +100,7 @@ bool validate_record(const MissionCheckpointRecord& record, std::string* error) 
   return true;
 }
 
+// 将临时检查点文件强制同步到磁盘，降低掉电后丢失风险。
 bool sync_file_to_disk(const std::filesystem::path& path, std::string* error) {
 #if defined(_WIN32)
   const int fd = ::_wopen(path.c_str(), _O_RDONLY | _O_BINARY);
@@ -117,6 +125,7 @@ bool sync_file_to_disk(const std::filesystem::path& path, std::string* error) {
   return true;
 }
 
+// 以平台原子替换操作将完整临时文件发布为正式检查点。
 bool atomic_replace_file(
     const std::filesystem::path& temporary,
     const std::filesystem::path& destination,
@@ -142,6 +151,7 @@ bool atomic_replace_file(
   return true;
 }
 
+// 将任务段消息序列化为检查点 JSON 对象。
 Json task_segment_to_json(const cleanbot_interfaces::msg::TaskSegment& segment) {
   return Json{
       {"index", segment.index},
@@ -163,6 +173,7 @@ Json task_segment_to_json(const cleanbot_interfaces::msg::TaskSegment& segment) 
   };
 }
 
+// 从检查点 JSON 对象恢复任务段消息。
 cleanbot_interfaces::msg::TaskSegment task_segment_from_json(const Json& json) {
   cleanbot_interfaces::msg::TaskSegment segment;
   segment.index = json.value("index", 0u);
@@ -184,6 +195,7 @@ cleanbot_interfaces::msg::TaskSegment task_segment_from_json(const Json& json) {
   return segment;
 }
 
+// 将航点消息序列化为检查点 JSON 对象。
 Json waypoint_to_json(const cleanbot_interfaces::msg::Waypoint& waypoint) {
   return Json{
       {"lat", waypoint.lat},
@@ -192,6 +204,7 @@ Json waypoint_to_json(const cleanbot_interfaces::msg::Waypoint& waypoint) {
   };
 }
 
+// 从检查点 JSON 对象恢复航点消息。
 cleanbot_interfaces::msg::Waypoint waypoint_from_json(const Json& json) {
   cleanbot_interfaces::msg::Waypoint waypoint;
   waypoint.lat = json.value("lat", 0.0);
@@ -200,6 +213,7 @@ cleanbot_interfaces::msg::Waypoint waypoint_from_json(const Json& json) {
   return waypoint;
 }
 
+// 将完整任务执行记录转换为稳定字段名的 JSON 数据。
 Json record_to_json(const MissionCheckpointRecord& record) {
   Json json;
   json["runId"] = record.run_id;
@@ -241,6 +255,7 @@ Json record_to_json(const MissionCheckpointRecord& record) {
   return json;
 }
 
+// 从 JSON 数据恢复完整任务执行记录及其任务段和航点。
 MissionCheckpointRecord record_from_json(const Json& json) {
   MissionCheckpointRecord record;
   record.run_id = json.value("runId", "");
@@ -286,18 +301,22 @@ MissionCheckpointRecord record_from_json(const Json& json) {
 
 }  // namespace
 
+// 保存检查点文件路径，后续读写均使用该固定位置。
 MissionCheckpointStore::MissionCheckpointStore(std::filesystem::path checkpoint_path)
     : checkpoint_path_(std::move(checkpoint_path)) {}
 
+// 返回当前检查点文件的配置路径。
 const std::filesystem::path& MissionCheckpointStore::checkpoint_path() const {
   return checkpoint_path_;
 }
 
+// 返回用于检查点创建和更新时间的 Unix 毫秒时间戳。
 std::int64_t MissionCheckpointStore::now_milliseconds() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
+// 校验并写入临时文件，同步落盘后原子替换正式检查点。
 bool MissionCheckpointStore::save(
     const MissionCheckpointRecord& record,
     std::string* error) const {
@@ -354,6 +373,7 @@ bool MissionCheckpointStore::save(
   return true;
 }
 
+// 读取、解析并校验最近检查点；文件不存在或无效时返回空值。
 std::optional<MissionCheckpointRecord> MissionCheckpointStore::load_latest(
     std::string* error) const {
   std::error_code fs_error;
@@ -396,6 +416,7 @@ std::optional<MissionCheckpointRecord> MissionCheckpointStore::load_latest(
   }
 }
 
+// 删除任务完成或取消后不再需要的检查点文件。
 bool MissionCheckpointStore::clear(std::string* error) const {
   std::error_code fs_error;
   if (!std::filesystem::exists(checkpoint_path_, fs_error)) {

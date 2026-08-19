@@ -44,6 +44,7 @@ namespace asio = boost::asio;
 
 class HttpGatewayNode : public rclcpp::Node {
  public:
+  // 构造 HTTP 网关节点，连接 ROS2 接口并准备网络服务运行环境。
   HttpGatewayNode() : Node("http_gateway_node") {
     manual_publisher_ = create_publisher<VehicleCommand>(
         "/control/manual_cmd", common::latest_command_qos());
@@ -92,11 +93,13 @@ class HttpGatewayNode : public rclcpp::Node {
             "tracking.max_z_speed",
         },
         false,
+        // 配置回调作用：接收最新配置快照，并刷新本节点对应的运行参数。
         [this](const config::ConfigSnapshot& snapshot, const bool initial) {
           configure(snapshot, initial);
         });
   }
 
+  // 析构节点时停止 HTTP 服务，避免后台网络线程继续访问已释放资源。
   ~HttpGatewayNode() override {
     stopServer();
   }
@@ -230,11 +233,13 @@ class HttpGatewayNode : public rclcpp::Node {
               const std::string& target) {
             return handleRequest(method, target);
           },
+          // 匿名函数作用：封装当前局部回调或判定逻辑，供调用方在本作用域内执行。
           [this](const std::string& message) {
             RCLCPP_WARN(get_logger(), "%s", message.c_str());
           },
           kHttpIoOperationDeadline);
       server_->start();
+      // 线程入口作用：运行当前节点的 I/O 事件循环，直到收到停止请求。
       server_thread_ = std::thread([this]() { io_context_.run(); });
     } catch (const std::exception& exception) {
       work_guard_.reset();
@@ -313,6 +318,7 @@ class HttpGatewayNode : public rclcpp::Node {
     return result;
   }
 
+  // 将服务映射决策转换为 HTTP JSON 响应。
   static HttpControlResult jsonResponse(
       const int status_code,
       const bool success,
@@ -325,6 +331,7 @@ class HttpGatewayNode : public rclcpp::Node {
     return result;
   }
 
+  // 使用显式状态码和业务字段构造 HTTP JSON 响应。
   static HttpControlResult jsonResponse(
       const HttpBusinessDecision& decision) {
     return jsonResponse(
@@ -500,6 +507,7 @@ class HttpGatewayNode : public rclcpp::Node {
 }  // namespace http
 }  // namespace cleanbot
 
+// 初始化 ROS 2，运行 HTTP 网关节点，并在退出前停止网络资源。
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   try {

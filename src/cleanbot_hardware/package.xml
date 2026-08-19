@@ -1,20 +1,33 @@
 <?xml version="1.0"?>
+<!--
+  文件作用：声明cleanbot_hardware ROS2包的元数据、构建依赖和测试依赖。
+  本包提供旧Python下位机协议兼容、串口独占访问以及ROS2硬件状态适配能力。
+-->
 <package format="3">
+  <!-- ROS2包名称，供依赖声明和ament索引定位本包。 -->
   <name>cleanbot_hardware</name>
+  <!-- 当前包的版本号；源码接口发生不兼容变化时应同步递增。 -->
   <version>0.1.0</version>
+  <!-- 包的功能摘要，说明本包面向下位机协议和串口硬件适配。 -->
   <description>Lower-machine protocol and exclusive serial gateway.</description>
+  <!-- 维护者联系信息，用于构建工具和发布元数据展示。 -->
   <maintainer email="engineering@cleanbot.local">Cleanbot Engineering</maintainer>
+  <!-- 项目许可证声明；当前代码按内部专有软件发布。 -->
   <license>Proprietary</license>
 
+  <!-- ament_cmake负责构建；rclcpp和三个cleanbot包提供节点、QoS、配置和消息接口。 -->
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>rclcpp</depend>
   <depend>cleanbot_common</depend>
   <depend>cleanbot_config</depend>
   <depend>cleanbot_interfaces</depend>
+  <!-- Boost.Asio用于异步串口和一秒重连定时器。 -->
   <depend>boost</depend>
+  <!-- GoogleTest只在BUILD_TESTING开启时使用，不进入运行时依赖。 -->
   <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
+    <!-- 告诉colcon/ament使用ament_cmake处理本包。 -->
     <build_type>ament_cmake</build_type>
   </export>
 </package>

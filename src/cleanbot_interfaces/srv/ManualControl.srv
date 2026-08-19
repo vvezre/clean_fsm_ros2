@@ -1,3 +1,4 @@
+# 文件作用：定义人工驾驶线速度、转向速度和制动控制服务。
 string source
 int32 x_speed
 int32 z_speed

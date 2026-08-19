@@ -1,3 +1,7 @@
+/*
+ * 文件作用：维护门控实现：协调维护请求、刹车证据和硬件零状态确认。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_mission/maintenance_gate.hpp"
 
 #include <algorithm>
@@ -7,6 +11,7 @@ namespace mission {
 
 namespace {
 
+constexpr std::uint8_t kStateSent = 1u;
 constexpr std::uint8_t kStateAcknowledged = 2u;
 constexpr std::uint8_t kStateRejected = 3u;
 constexpr std::uint8_t kStateTimedOut = 4u;
@@ -15,6 +20,7 @@ constexpr std::uint8_t kStateSuperseded = 8u;
 
 }  // namespace
 
+// 以无活动维护代次的旧格式恢复持久化状态。
 bool MaintenanceGate::restorePersistentState(
     const std::uint64_t last_generation,
     const bool mission_idle) {
@@ -24,6 +30,7 @@ bool MaintenanceGate::restorePersistentState(
       mission_idle);
 }
 
+// 以包含活动维护代次的新格式恢复持久化状态。
 bool MaintenanceGate::restorePersistentState(
     const std::uint64_t last_generation,
     const std::uint64_t active_generation,
@@ -34,6 +41,7 @@ bool MaintenanceGate::restorePersistentState(
       mission_idle);
 }
 
+// 校验递增代次后申请进入维护安全门。
 bool MaintenanceGate::request(
     const std::uint64_t generation,
     const bool mission_idle) {
@@ -50,6 +58,7 @@ bool MaintenanceGate::request(
   return true;
 }
 
+// 仅允许匹配当前代次的调用方退出维护模式。
 bool MaintenanceGate::release(const std::uint64_t generation) {
   if (!active_ || generation != generation_) {
     return false;
@@ -62,6 +71,7 @@ bool MaintenanceGate::release(const std::uint64_t generation) {
   return true;
 }
 
+// 更新任务是否空闲，影响维护模式是否可以就绪。
 void MaintenanceGate::setMissionIdle(const bool mission_idle) {
   if (mission_idle != mission_idle_) {
     pristine_ = false;
@@ -69,6 +79,7 @@ void MaintenanceGate::setMissionIdle(const bool mission_idle) {
   mission_idle_ = mission_idle;
 }
 
+// 验证最终输出已成为零速、刹车、停刷盘的维护命令。
 void MaintenanceGate::observeFinalCommand(
     const FinalCommandEvidence& command) {
   if (!active_ || brake_failure_ != BrakeFailure::kNone ||
@@ -99,6 +110,7 @@ void MaintenanceGate::observeFinalCommand(
   applyPendingStatus(command.command_id);
 }
 
+// 根据下位机命令状态确认刹车，或锁存不可恢复的刹车失败。
 void MaintenanceGate::observeCommandStatus(
     const CommandStatusEvidence& status) {
   if (!active_ || brake_failure_ != BrakeFailure::kNone ||
@@ -107,7 +119,10 @@ void MaintenanceGate::observeCommandStatus(
     return;
   }
 
-  const bool acknowledged = status.state == kStateAcknowledged;
+  // 旧 Python 下位机协议没有在线 ACK；STATE_SENT 仅证明完整刹车帧已交给串口驱动。
+  // 是否就绪仍必须等待后续新鲜硬件帧确认所有输出均为零。
+  const bool acknowledged =
+      status.state == kStateSent || status.state == kStateAcknowledged;
   const BrakeFailure failure = failureForState(status.state);
   if (!acknowledged && failure == BrakeFailure::kNone) {
     return;
@@ -126,6 +141,7 @@ void MaintenanceGate::observeCommandStatus(
   rememberPendingStatus(status.command_id, acknowledged, failure);
 }
 
+// 以同一发布者会话中连续两帧零输出硬件状态确认车辆已安全静止。
 void MaintenanceGate::observeHardware(const HardwareEvidence& hardware) {
   if (!active_ || brake_failure_ != BrakeFailure::kNone) {
     return;
@@ -195,6 +211,7 @@ void MaintenanceGate::observeHardware(const HardwareEvidence& hardware) {
       std::min<std::uint8_t>(2u, consecutive_zero_frames_ + 1u);
 }
 
+// 汇总维护门安全条件，生成对外可诊断的阶段、阻塞码和就绪状态。
 MaintenanceGateSnapshot MaintenanceGate::snapshot() const {
   MaintenanceGateSnapshot result;
   result.generation = generation_;
@@ -277,14 +294,17 @@ MaintenanceGateSnapshot MaintenanceGate::snapshot() const {
   return result;
 }
 
+// 返回历史上最后被接受的维护申请代次。
 std::uint64_t MaintenanceGate::lastGeneration() const {
   return last_generation_;
 }
 
+// 返回命令回执关联缓存的固定容量。
 std::size_t MaintenanceGate::pendingStatusCapacity() const {
   return kPendingStatusCapacity;
 }
 
+// 执行一次性恢复，拒绝格式不合法或已被运行时状态污染的请求。
 bool MaintenanceGate::restorePersistentStateImpl(
     const std::uint64_t last_generation,
     const std::uint64_t* const active_generation,
@@ -305,6 +325,7 @@ bool MaintenanceGate::restorePersistentStateImpl(
   return true;
 }
 
+// 检查证据是否属于当前维护代次和约定的维护命令来源。
 bool MaintenanceGate::matches(
     const std::uint64_t generation,
     const std::uint64_t request_id,
@@ -313,6 +334,7 @@ bool MaintenanceGate::matches(
       source == "maintenance_gate";
 }
 
+// 将下位机命令状态转换为维护门使用的失败类型。
 MaintenanceGate::BrakeFailure MaintenanceGate::failureForState(
     const std::uint8_t state) {
   if (state == kStateRejected) {
@@ -330,6 +352,7 @@ MaintenanceGate::BrakeFailure MaintenanceGate::failureForState(
   return BrakeFailure::kNone;
 }
 
+// 暂存先于最终命令到达的回执，并限制关联缓存容量。
 void MaintenanceGate::rememberPendingStatus(
     const std::uint64_t command_id,
     const bool acknowledged,
@@ -354,6 +377,7 @@ void MaintenanceGate::rememberPendingStatus(
   }
 }
 
+// 当最终命令出现时应用此前缓存的同命令回执。
 void MaintenanceGate::applyPendingStatus(const std::uint64_t command_id) {
   const auto pending = pending_command_statuses_.find(command_id);
   if (pending == pending_command_statuses_.end()) {
@@ -369,6 +393,7 @@ void MaintenanceGate::applyPendingStatus(const std::uint64_t command_id) {
   }
 }
 
+// 首次确认当前刹车命令后，开始等待新的硬件静止证据。
 void MaintenanceGate::acknowledgeCurrentCommand() {
   if (!brake_acknowledged_) {
     brake_acknowledged_ = true;
@@ -376,6 +401,7 @@ void MaintenanceGate::acknowledgeCurrentCommand() {
   }
 }
 
+// 锁存刹车失败并丢弃所有等待中的回执关联。
 void MaintenanceGate::latchFailure(const BrakeFailure failure) {
   brake_failure_ = failure;
   brake_acknowledged_ = false;
@@ -383,6 +409,7 @@ void MaintenanceGate::latchFailure(const BrakeFailure failure) {
   resetHardwareConfirmation();
 }
 
+// 清空一次维护申请的命令、回执和硬件证据。
 void MaintenanceGate::resetEvidence() {
   command_gate_applied_ = false;
   current_command_id_ = 0u;
@@ -392,6 +419,7 @@ void MaintenanceGate::resetEvidence() {
   resetHardwareEvidence();
 }
 
+// 清空连续零帧确认计数，但保留发布者会话信息。
 void MaintenanceGate::resetHardwareConfirmation() {
   hardware_sample_observed_ = false;
   hardware_fresh_ = false;
@@ -401,6 +429,7 @@ void MaintenanceGate::resetHardwareConfirmation() {
   consecutive_zero_frames_ = 0u;
 }
 
+// 清空硬件确认以及发布者会话和帧序号记录。
 void MaintenanceGate::resetHardwareEvidence() {
   resetHardwareConfirmation();
   has_publisher_epoch_ = false;

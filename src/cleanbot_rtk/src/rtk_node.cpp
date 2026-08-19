@@ -66,11 +66,13 @@ class RtkNode : public rclcpp::Node {
             "ntrip.rtcm_timeout_sec",
         },
         true,
+        // 配置回调作用：接收最新配置快照，并刷新本节点对应的运行参数。
         [this](const config::ConfigSnapshot& snapshot, const bool initial) {
           configure(snapshot, initial);
         });
   }
 
+  // 析构节点时停止 NTRIP 和串口异步任务，避免回调访问失效对象。
   ~RtkNode() override {
     if (ntrip_client_) {
       ntrip_client_->stop();
@@ -324,6 +326,7 @@ class RtkNode : public rclcpp::Node {
         save_config_on_connect);
     ntrip_client_ = std::make_unique<NtripClient>(
         ntrip_config,
+        // 匿名函数作用：封装当前局部回调或判定逻辑，供调用方在本作用域内执行。
         [this](const std::vector<std::uint8_t>& bytes) {
           onRtcmBytes(bytes);
         });

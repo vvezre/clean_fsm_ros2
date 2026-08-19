@@ -1,3 +1,4 @@
+# 文件作用：验证 modeling sqlite contract 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import shutil
@@ -41,6 +42,7 @@ SOURCE = PACKAGE / "src" / "sqlite_model_repository.cpp"
 CORE_LOADED = False
 
 
+# 辅助方法：读取或加载 load_core 所需的测试数据并返回解析结果。
 def load_core(test_case):
     global CORE_LOADED
     test_case.assertTrue(HEADER.is_file(), "SQLite model repository header is missing")
@@ -72,6 +74,7 @@ def load_core(test_case):
     CORE_LOADED = True
 
 
+# 辅助方法：为 sample_model 测试场景准备输入、执行操作或整理结果。
 def sample_model():
     api = cppyy.gbl.cleanbot.modeling
     model = api.CleaningModel()
@@ -128,6 +131,7 @@ def sample_model():
     return model
 
 
+# 辅助方法：为 sample_plan 测试场景准备输入、执行操作或整理结果。
 def sample_plan(model_version):
     api = cppyy.gbl.cleanbot.modeling
     plan = api.CleaningPlan()
@@ -159,13 +163,16 @@ def sample_plan(model_version):
 
 
 class ModelingSqliteContractTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         load_core(self)
         self.temp_dir = Path(tempfile.mkdtemp(prefix="cleanbot-modeling-"))
 
+    # 测试清理：回收当前用例产生的临时文件、进程和状态。
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    # 测试作用：验证“schema_and_draft_round_trip”场景的契约、输出结果和边界行为。
     def test_schema_and_draft_round_trip(self):
         database_path = self.temp_dir / "modeling.db"
         repository = cppyy.gbl.cleanbot.modeling.SqliteModelRepository(
@@ -218,6 +225,7 @@ class ModelingSqliteContractTest(unittest.TestCase):
         ):
             self.assertIn(table, tables)
 
+    # 测试作用：验证“formal_version_and_plan_survive_reopen”场景的契约、输出结果和边界行为。
     def test_formal_version_and_plan_survive_reopen(self):
         database_path = self.temp_dir / "modeling.db"
         repository = cppyy.gbl.cleanbot.modeling.SqliteModelRepository(
@@ -244,6 +252,7 @@ class ModelingSqliteContractTest(unittest.TestCase):
         self.assertEqual(loaded_plan.plan_hash, "abc123")
         self.assertEqual(len(loaded_plan.segments), 1)
 
+    # 测试作用：验证“schema_v1_migrates_to_one_shared_model_origin”场景的契约、输出结果和边界行为。
     def test_schema_v1_migrates_to_one_shared_model_origin(self):
         database_path = self.temp_dir / "legacy-modeling.db"
         with sqlite3.connect(database_path) as connection:
@@ -297,6 +306,7 @@ class ModelingSqliteContractTest(unittest.TestCase):
         self.assertEqual(origin, (31.2, 121.5, 1))
         self.assertGreater(second_x, 4000.0)
 
+    # 测试作用：验证“schema_v2_migrates_new_recognition_columns”场景的契约、输出结果和边界行为。
     def test_schema_v2_migrates_new_recognition_columns(self):
         database_path = self.temp_dir / "schema-v2-modeling.db"
         with sqlite3.connect(database_path) as connection:

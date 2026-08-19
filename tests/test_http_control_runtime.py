@@ -1,3 +1,4 @@
+# 文件作用：验证 http control runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -44,12 +45,15 @@ cppyy.cppdef(
 
 
 class HttpControlRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         self.router = cppyy.gbl.cleanbot.http.HttpControlRouter()
 
+    # 辅助方法：为 route 测试场景准备输入、执行操作或整理结果。
     def route(self, target):
         return self.router.route("GET", target)
 
+    # 测试作用：验证“stale_sequence_does_not_create_manual_action”场景的契约、输出结果和边界行为。
     def test_stale_sequence_does_not_create_manual_action(self):
         first = self.route(
             "/vehicle/joystickMove/50/0/1?sessionId=session-a&sequence=10"
@@ -69,6 +73,7 @@ class HttpControlRuntimeTest(unittest.TestCase):
             cppyy.gbl.cleanbot.http.HttpControlAction.kNone,
         )
 
+    # 测试作用：验证“release_prevents_delayed_movement_from_overwriting_it”场景的契约、输出结果和边界行为。
     def test_release_prevents_delayed_movement_from_overwriting_it(self):
         released = self.route(
             "/vehicle/joystickMove/0/0/0?sessionId=session-b&sequence=20"
@@ -81,6 +86,7 @@ class HttpControlRuntimeTest(unittest.TestCase):
         self.assertTrue(released.brake)
         self.assertEqual(delayed.status_code, 409)
 
+    # 测试作用：验证“legacy_and_partial_sequence_parameters”场景的契约、输出结果和边界行为。
     def test_legacy_and_partial_sequence_parameters(self):
         legacy = self.route("/vehicle/joystickMove/50/0/1")
         missing_sequence = self.route(

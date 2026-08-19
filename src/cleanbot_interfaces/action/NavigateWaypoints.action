@@ -1,3 +1,4 @@
+# 文件作用：定义按航点导航动作的目标、结果和执行进度反馈。
 cleanbot_interfaces/Waypoint[] waypoints
 bool loop
 uint32 loop_count

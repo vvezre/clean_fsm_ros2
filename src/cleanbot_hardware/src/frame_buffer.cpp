@@ -1,3 +1,9 @@
+/*
+ * 文件作用：把异步串口读取产生的字节流重组为固定23字节旧状态帧。
+ *
+ * 支持半帧、连续多帧、帧前噪声和错误候选帧重新同步。
+ * 这里只识别固定帧头、长度和尾部位置，字段合法性由StatusFrameParser负责。
+ */
 #include "cleanbot_hardware/frame_buffer.hpp"
 
 namespace cleanbot {
@@ -20,9 +26,7 @@ bool FrameBuffer::pop(std::vector<std::uint8_t>& frame) {
   frame.clear();
   while (true) {
     std::size_t first_start = 0u;
-    while (first_start < data_.size() &&
-           data_[first_start] != kStatusFrameStart &&
-           data_[first_start] != kAckFrameStart) {
+    while (first_start < data_.size() && data_[first_start] != kStatusFrameStart) {
       ++first_start;
     }
     data_.erase(data_.begin(), data_.begin() + static_cast<std::ptrdiff_t>(first_start));
@@ -30,21 +34,19 @@ bool FrameBuffer::pop(std::vector<std::uint8_t>& frame) {
       return false;
     }
 
-    const bool status_frame = data_.front() == kStatusFrameStart;
-    const std::size_t frame_length = status_frame ? kStatusFrameLength : kAckFrameLength;
-    const std::uint8_t frame_end = status_frame ? kStatusFrameEnd : kAckFrameEnd;
-    if (data_.size() < frame_length) {
+    if (data_.size() < kStatusFrameLength) {
       return false;
     }
 
-    if (data_[frame_length - 1u] == frame_end) {
-      frame.assign(data_.begin(), data_.begin() + static_cast<std::ptrdiff_t>(frame_length));
-      data_.erase(data_.begin(), data_.begin() + static_cast<std::ptrdiff_t>(frame_length));
+    if (data_[kStatusFrameLength - 1u] == kStatusFrameEnd) {
+      frame.assign(
+          data_.begin(), data_.begin() + static_cast<std::ptrdiff_t>(kStatusFrameLength));
+      data_.erase(
+          data_.begin(), data_.begin() + static_cast<std::ptrdiff_t>(kStatusFrameLength));
       return true;
     }
 
-    // The byte at the fixed tail position is invalid. Drop only this candidate
-    // start and search again, preserving every other buffered byte.
+    // 固定尾位置无效时只删除当前候选帧头，保留其余字节继续寻找下一帧头。
     data_.erase(data_.begin());
   }
 }
@@ -63,7 +65,7 @@ void FrameBuffer::trim() {
 
   std::size_t start_index = data_.size();
   for (std::size_t index = data_.size(); index > 0u; --index) {
-    if (data_[index - 1u] == kStatusFrameStart || data_[index - 1u] == kAckFrameStart) {
+    if (data_[index - 1u] == kStatusFrameStart) {
       start_index = index - 1u;
       break;
     }

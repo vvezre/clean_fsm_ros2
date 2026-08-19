@@ -80,6 +80,7 @@ class CommandArbiterNode : public rclcpp::Node {
             "control.vision_command_lease_ms",
         },
         false,
+        // 配置回调作用：接收最新配置快照，并刷新本节点对应的运行参数。
         [this](const config::ConfigSnapshot& snapshot, const bool initial) {
           configure(snapshot, initial);
         });
@@ -96,6 +97,7 @@ class CommandArbiterNode : public rclcpp::Node {
     return create_subscription<VehicleCommand>(
         topic,
         common::latest_command_qos(),
+        // 订阅回调作用：接收对应主题消息，并转交节点内部状态处理流程。
         [this, source](const VehicleCommand::SharedPtr message) {
           onCommand(source, *message);
         });
@@ -136,7 +138,7 @@ class CommandArbiterNode : public rclcpp::Node {
       return;
     }
     if (configured_ && arbiter_) {
-      // An inactive state must carry the exact generation that activated the gate.
+      // 关闭维护门的消息必须携带最初激活该门的同一代次。
       arbiter_->set_maintenance(message->gate_active, message->generation);
       if (observation.force_republish && observation.gate_active) {
         has_last_output_ = false;
@@ -145,6 +147,7 @@ class CommandArbiterNode : public rclcpp::Node {
     }
   }
 
+  // 校验维护状态发布者会话，并缓存被协调器接受的最新状态。
   MaintenancePublisherObservation cacheMaintenanceState(
       const MaintenanceState& state,
       const common::PublisherIdentity& publisher_identity) {
@@ -156,6 +159,7 @@ class CommandArbiterNode : public rclcpp::Node {
     return observation;
   }
 
+  // 从 ROS 消息元信息提取中间件实现标识和发布者 GID。
   static common::PublisherIdentity publisherIdentity(
       const rclcpp::MessageInfo& message_info) {
     const auto& gid =
@@ -170,6 +174,7 @@ class CommandArbiterNode : public rclcpp::Node {
     return identity;
   }
 
+  // 仲裁核心重建后重新应用已接受的维护门状态。
   void applyCachedMaintenanceState() {
     if (!arbiter_ || !maintenance_coordinator_.has_state()) {
       return;
@@ -292,6 +297,7 @@ class CommandArbiterNode : public rclcpp::Node {
     return VehicleCommand::PRIORITY_VISION;
   }
 
+  // 将非负 ROS 时间戳转换为毫秒，非法负时间返回零。
   static std::uint64_t stampMs(const builtin_interfaces::msg::Time& stamp) {
     if (stamp.sec < 0) {
       return 0u;
@@ -315,6 +321,7 @@ class CommandArbiterNode : public rclcpp::Node {
         left.charge == right.charge;
   }
 
+  // 返回不受系统时钟校正影响的单调毫秒计时。
   static std::uint64_t monotonicMs() {
     return static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(

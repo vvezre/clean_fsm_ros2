@@ -1,3 +1,7 @@
+/*
+ * 文件作用：HTTP服务器实现：监听端口、接收连接并管理会话生命周期。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_http/http_server.hpp"
 
 #include <future>
@@ -17,6 +21,7 @@ using tcp = asio::ip::tcp;
 
 namespace {
 
+// 将监听端点操作和 Boost 错误信息组合为启动异常。
 std::runtime_error endpoint_error(
     const std::string& operation,
     const std::string& address,
@@ -30,6 +35,7 @@ std::runtime_error endpoint_error(
 
 }  // namespace
 
+// 创建 acceptor，校验地址并完成监听端口绑定。
 HttpServer::HttpServer(
     asio::io_context& io_context,
     const std::string& listen_address,
@@ -73,23 +79,27 @@ HttpServer::HttpServer(
   port_ = local_endpoint.port();
 }
 
+// 析构时保证监听器和活动会话均已停止。
 HttpServer::~HttpServer() {
   boost::system::error_code ignored;
   acceptor_.cancel(ignored);
   acceptor_.close(ignored);
 }
 
+// 在 Asio 执行器上启动首次异步连接接受操作。
 void HttpServer::start() {
   if (started_.exchange(true) || stopping_.load()) {
     return;
   }
   asio::post(
       strand_,
+      // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
       [self = shared_from_this()]() {
         self->acceptNext();
       });
 }
 
+// 线程安全地停止服务器，并等待执行器完成资源关闭。
 void HttpServer::stop() {
   std::lock_guard<std::mutex> stop_lock(stop_mutex_);
   if (stopped_.load()) {
@@ -110,6 +120,7 @@ void HttpServer::stop() {
   auto future = completed->get_future();
   asio::post(
       strand_,
+      // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
       [self = shared_from_this(), completed]() {
         self->stopOnExecutor();
         completed->set_value();
@@ -120,10 +131,12 @@ void HttpServer::stop() {
   }
 }
 
+// 返回 acceptor 实际绑定的本地端口。
 std::uint16_t HttpServer::port() const {
   return port_;
 }
 
+// 创建新 socket 并投递下一次异步 accept。
 void HttpServer::acceptNext() {
   if (stopping_.load() || !acceptor_.is_open()) {
     return;
@@ -137,6 +150,7 @@ void HttpServer::acceptNext() {
       });
 }
 
+// 处理连接接受结果，创建会话后继续接受下一连接。
 void HttpServer::onAccept(
     const std::shared_ptr<tcp::socket>& socket,
     const boost::system::error_code& error) {
@@ -152,6 +166,7 @@ void HttpServer::onAccept(
   auto session = std::make_shared<HttpSession>(
       std::move(*socket),
       request_handler_,
+      // 匿名函数作用：封装当前局部回调或判定逻辑，供调用方在本作用域内执行。
       [weak_server](const std::shared_ptr<HttpSession>& closed_session) {
         if (const auto server = weak_server.lock()) {
           server->removeSession(closed_session);
@@ -163,11 +178,13 @@ void HttpServer::onAccept(
   acceptNext();
 }
 
+// 从活动集合中移除已关闭会话的弱引用。
 void HttpServer::removeSession(
     const std::shared_ptr<HttpSession>& session) {
   sessions_.erase(std::weak_ptr<HttpSession>(session));
 }
 
+// 在执行器线程关闭 acceptor，并停止全部活动会话。
 void HttpServer::stopOnExecutor() {
   if (stopped_.exchange(true)) {
     return;
@@ -191,6 +208,7 @@ void HttpServer::stopOnExecutor() {
   }
 }
 
+// 将网络错误交给上层回调，未配置回调时保持静默。
 void HttpServer::reportError(const std::string& message) const {
   if (error_handler_) {
     error_handler_(message);

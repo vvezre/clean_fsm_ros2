@@ -1,3 +1,4 @@
+# 文件作用：定义软件急停服务的请求来源、原因和处理结果。
 string source
 string reason
 ---

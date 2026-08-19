@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <cstdint>
 #include <vector>
 
@@ -9,6 +10,7 @@ namespace {
 
 using cleanbot::rtk::Rtcm3FrameBuffer;
 
+// 辅助函数作用：为测试场景提供 crc24q 所需的准备、执行或清理逻辑。
 std::uint32_t crc24q(const std::vector<std::uint8_t>& bytes) {
   std::uint32_t crc = 0u;
   for (const auto value : bytes) {
@@ -23,6 +25,7 @@ std::uint32_t crc24q(const std::vector<std::uint8_t>& bytes) {
   return crc & 0x00ffffffu;
 }
 
+// 辅助函数作用：通过 makeFrame 构造当前测试所需的输入数据。
 std::vector<std::uint8_t> makeFrame(const std::vector<std::uint8_t>& payload) {
   std::vector<std::uint8_t> frame{
       0xd3u,
@@ -36,6 +39,7 @@ std::vector<std::uint8_t> makeFrame(const std::vector<std::uint8_t>& payload) {
   return frame;
 }
 
+// 测试目的：验证 Rtcm3FrameBuffer.ReassemblesSplitAndStickyFrames 场景的行为、状态变化和边界条件。
 TEST(Rtcm3FrameBuffer, ReassemblesSplitAndStickyFrames) {
   Rtcm3FrameBuffer buffer;
   const auto first = makeFrame({1u, 2u, 3u});

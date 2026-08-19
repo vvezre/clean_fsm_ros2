@@ -1,3 +1,10 @@
+/*
+ * 文件作用：声明旧下位机物理串口的独占、异步传输层。
+ *
+ * 输入：节点提供的重复命令批次及优先级。
+ * 输出：完整23字节状态帧、连接变化和发送结果回调。
+ * 线程模型：所有串口、队列和定时器操作都在单独的Boost.Asio I/O线程执行。
+ */
 #ifndef CLEANBOT_HARDWARE__LOWER_MACHINE_SERIAL_HPP_
 #define CLEANBOT_HARDWARE__LOWER_MACHINE_SERIAL_HPP_
 
@@ -18,6 +25,7 @@
 namespace cleanbot {
 namespace hardware {
 
+// 从传输层返回给ROS2节点的发送阶段；Written只代表本机串口写完成，不是下位机ACK。
 enum class SendEvent : std::uint8_t {
   kQueued = 0,
   kWritten = 1,
@@ -26,13 +34,14 @@ enum class SendEvent : std::uint8_t {
   kSuperseded = 4,
 };
 
+// 一个对象唯一拥有一个物理串口，禁止复制，负责8N1配置、异步读写和断线重连。
 class LowerMachineSerial {
  public:
-  /// 完整串口帧回调：每解析出一帧状态或ACK数据时通知上层节点。
+  /// 完整串口帧回调：每解析出一帧固定23字节状态数据时通知上层节点。
   using FrameCallback = std::function<void(const std::vector<std::uint8_t>&)>;
   /// 连接状态回调：串口连接或断开时将状态和原因通知上层节点。
   using ConnectionCallback = std::function<void(bool, const std::string&)>;
-  /// 单帧发送事件回调：报告真实入队、写入、拒绝、离线或被新命令替换状态。
+  /// 单次发送批次回调：报告入队、写入、拒绝、离线或被新命令替换状态。
   using SendCallback = std::function<void(SendEvent, const std::string&)>;
 
   /// 创建下位机串口传输对象，保存端口参数及上层回调，但尚不启动I/O线程。
@@ -53,7 +62,7 @@ class LowerMachineSerial {
   void start();
   /// 停止重连和读写任务，关闭串口并等待I/O线程退出。
   void stop();
-  /// 将完整协议帧按指定优先级加入异步发送队列；合并键可淘汰尚未发送的旧连续命令。
+  /// 将完整字节批次加入异步发送队列；批次可包含旧协议要求的连续5帧。
   void send(
       const std::vector<std::uint8_t>& frame,
       WritePriority priority = WritePriority::kFinite,
@@ -86,7 +95,9 @@ class LowerMachineSerial {
   /// 更新原子连接标志，并通过回调向上层报告连接状态变化。
   void notifyConnection(bool connected, const std::string& detail);
 
+  // 单次读取缓存不要求等于协议帧长度，FrameBuffer负责跨读取重组。
   static constexpr std::size_t kReadBufferSize = 256u;
+  // 限制积压命令数量，配合合并和优先级淘汰避免控制延迟无限增长。
   static constexpr std::size_t kMaxWriteQueueSize = 32u;
 
   std::string port_name_;

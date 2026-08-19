@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <filesystem>
 #include <fstream>
 
@@ -12,6 +13,7 @@ using cleanbot::mission::MissionCheckpointStore;
 using cleanbot::mission::MissionState;
 using cleanbot::mission::MissionStateMachine;
 
+// 测试目的：验证 MissionStateMachine.StartFromCheckpointSegment 场景的行为、状态变化和边界条件。
 TEST(MissionStateMachine, StartFromCheckpointSegment) {
   MissionStateMachine machine;
   ASSERT_TRUE(machine.start(5u, 2u));
@@ -22,6 +24,7 @@ TEST(MissionStateMachine, StartFromCheckpointSegment) {
   EXPECT_EQ(machine.current_segment(), 3u);
 }
 
+// 测试目的：验证 MissionCheckpointStore.SavesAndLoadsCheckpoint 场景的行为、状态变化和边界条件。
 TEST(MissionCheckpointStore, SavesAndLoadsCheckpoint) {
   const auto path = std::filesystem::path(::testing::TempDir()) /
       "mission_checkpoint.json";
@@ -89,6 +92,7 @@ TEST(MissionCheckpointStore, SavesAndLoadsCheckpoint) {
   EXPECT_DOUBLE_EQ(loaded->segments.front().end_lon, segment.end_lon);
 }
 
+// 测试目的：验证 MissionCheckpointStore.RejectsMalformedCheckpointWithoutThrowing 场景的行为、状态变化和边界条件。
 TEST(MissionCheckpointStore, RejectsMalformedCheckpointWithoutThrowing) {
   const auto path = std::filesystem::path(::testing::TempDir()) /
       "malformed_mission_checkpoint.json";
@@ -110,6 +114,7 @@ TEST(MissionCheckpointStore, RejectsMalformedCheckpointWithoutThrowing) {
   EXPECT_FALSE(error.empty());
 }
 
+// 测试目的：验证 MissionCheckpointStore.RejectsProgressBeyondPlanBounds 场景的行为、状态变化和边界条件。
 TEST(MissionCheckpointStore, RejectsProgressBeyondPlanBounds) {
   const auto path = std::filesystem::path(::testing::TempDir()) /
       "invalid_progress_checkpoint.json";
@@ -140,6 +145,7 @@ TEST(MissionCheckpointStore, RejectsProgressBeyondPlanBounds) {
   EXPECT_FALSE(error.empty());
 }
 
+// 测试目的：验证 MissionCheckpointStore.PreservesUnboundedLoopProgress 场景的行为、状态变化和边界条件。
 TEST(MissionCheckpointStore, PreservesUnboundedLoopProgress) {
   const auto path = std::filesystem::path(::testing::TempDir()) /
       "continuous_mission_checkpoint.json";

@@ -1,3 +1,4 @@
+# 文件作用：验证 deployment files 相关契约、运行逻辑和边界条件。
 import importlib.util
 import hashlib
 import json
@@ -12,11 +13,13 @@ DEPLOYMENT = WORKSPACE / "deployment"
 
 
 class DeploymentFilesTest(unittest.TestCase):
+    # 辅助方法：读取或加载 read 所需的测试数据并返回解析结果。
     def read(self, relative):
         path = WORKSPACE / relative
         self.assertTrue(path.is_file(), f"missing deployment file: {path}")
         return path.read_text(encoding="utf-8")
 
+    # 测试作用：验证“updater_config_is_strict_and_defaults_to_manual_apply”场景的契约、输出结果和边界行为。
     def test_updater_config_is_strict_and_defaults_to_manual_apply(self):
         updater_path = DEPLOYMENT / "updater" / "cleanbot_updater.py"
         spec = importlib.util.spec_from_file_location(
@@ -33,6 +36,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertFalse(config.auto_apply)
         self.assertEqual(config.service_name, "cleanbot.service")
 
+    # 测试作用：验证“systemd_runs_robot_unprivileged_and_update_timer_as_root”场景的契约、输出结果和边界行为。
     def test_systemd_runs_robot_unprivileged_and_update_timer_as_root(self):
         robot = self.read("deployment/systemd/cleanbot.service")
         updater = self.read("deployment/systemd/cleanbot-update.service")
@@ -73,6 +77,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertIn("[Install]", updater)
         self.assertIn("WantedBy=multi-user.target", updater)
 
+    # 测试作用：验证“runtime_wrappers_source_only_fixed_ros_and_release_paths”场景的契约、输出结果和边界行为。
     def test_runtime_wrappers_source_only_fixed_ros_and_release_paths(self):
         start = self.read("deployment/bin/cleanbot-start")
         updater = self.read("deployment/bin/cleanbot-updater")
@@ -102,6 +107,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertIn("/usr/bin/flock", updater)
         self.assertIn("/run/lock/cleanbot-updater.lock", updater)
 
+    # 测试作用：验证“udev_rules_are_inert_templates_until_serials_are_configured”场景的契约、输出结果和边界行为。
     def test_udev_rules_are_inert_templates_until_serials_are_configured(self):
         rules = self.read("deployment/udev/99-cleanbot.rules")
 
@@ -112,6 +118,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertIn('GROUP="dialout"', rules)
         self.assertNotIn('KERNEL=="ttyUSB*"', rules)
 
+    # 测试作用：验证“logrotate_and_install_rollback_entrypoints_exist”场景的契约、输出结果和边界行为。
     def test_logrotate_and_install_rollback_entrypoints_exist(self):
         logrotate = self.read("deployment/logrotate/cleanbot")
         install = self.read("deployment/install/install.sh")
@@ -135,6 +142,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertIn("cleanbot-updater", rollback)
         self.assertIn("rollback", rollback)
 
+    # 测试作用：验证“install_bootstraps_maintenance_store_before_activation”场景的契约、输出结果和边界行为。
     def test_install_bootstraps_maintenance_store_before_activation(self):
         mission_cmake = self.read("src/cleanbot_mission/CMakeLists.txt")
         initializer = self.read(
@@ -167,6 +175,7 @@ class DeploymentFilesTest(unittest.TestCase):
             ),
         )
 
+    # 测试作用：验证“arm64_release_workflow_builds_tests_signs_and_publishes”场景的契约、输出结果和边界行为。
     def test_arm64_release_workflow_builds_tests_signs_and_publishes(self):
         workflow = self.read(".github/workflows/arm64-release.yml")
 
@@ -208,6 +217,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertNotIn("pull_request:", workflow)
         self.assertNotIn("push:", workflow)
 
+    # 测试作用：验证“arm64_release_adds_ros_repository_before_ros_build_tools”场景的契约、输出结果和边界行为。
     def test_arm64_release_adds_ros_repository_before_ros_build_tools(self):
         workflow = self.read(".github/workflows/arm64-release.yml")
         bootstrap_install = (
@@ -230,6 +240,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertLess(repository_index, refreshed_index)
         self.assertLess(refreshed_index, workflow.index(ros_install))
 
+    # 测试作用：验证“release_builder_creates_reproducible_archive_and_canonical_manifest”场景的契约、输出结果和边界行为。
     def test_release_builder_creates_reproducible_archive_and_canonical_manifest(self):
         builder_path = (
             DEPLOYMENT / "release" / "build_release_assets.py"
@@ -311,6 +322,7 @@ class DeploymentFilesTest(unittest.TestCase):
                     created_at="2026-07-29T00:00:00Z",
                 )
 
+    # 测试作用：验证“windows_bootstrap_and_emergency_rollback_do_not_embed_credentials”场景的契约、输出结果和边界行为。
     def test_windows_bootstrap_and_emergency_rollback_do_not_embed_credentials(self):
         bootstrap = self.read(
             "deployment/windows/bootstrap-pi.ps1"
@@ -328,6 +340,7 @@ class DeploymentFilesTest(unittest.TestCase):
         self.assertIn("scp", bootstrap)
         self.assertIn("/usr/local/sbin/cleanbot-rollback", rollback)
 
+    # 测试作用：验证“deployment_readme_documents_manual_release_and_auto_apply_gate”场景的契约、输出结果和边界行为。
     def test_deployment_readme_documents_manual_release_and_auto_apply_gate(self):
         documentation = self.read("deployment/README.md")
 

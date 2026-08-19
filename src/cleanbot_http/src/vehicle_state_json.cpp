@@ -1,3 +1,7 @@
+/*
+ * 文件作用：车辆状态JSON实现：把ROS2车辆状态组织为对外JSON对象。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_http/vehicle_state_json.hpp"
 
 #include <cmath>
@@ -9,6 +13,7 @@ namespace cleanbot {
 namespace http {
 namespace {
 
+// 转义 JSON 字符串中的引号、反斜杠和控制字符。
 std::string escapeJson(const std::string& value) {
   std::ostringstream output;
   output.imbue(std::locale::classic());
@@ -49,10 +54,12 @@ std::string escapeJson(const std::string& value) {
   return output.str();
 }
 
+// 返回无需额外分配的 JSON 布尔字面量。
 const char* jsonBoolean(const bool value) {
   return value ? "true" : "false";
 }
 
+// 向输出流追加经过转义的 JSON 字符串字段。
 void appendString(
     std::ostringstream& output,
     const char* name,
@@ -62,6 +69,7 @@ void appendString(
 
 }  // namespace
 
+// 将业务状态、错误码、说明和数据封装为统一响应 JSON。
 std::string business_response_json(
     const bool success,
     const std::string& code,
@@ -77,6 +85,7 @@ std::string business_response_json(
   return output.str();
 }
 
+// 序列化车辆状态字段，并包装为成功的统一业务响应。
 std::string vehicle_state_json(const VehicleStateJsonData& state) {
   std::ostringstream data;
   data.imbue(std::locale::classic());

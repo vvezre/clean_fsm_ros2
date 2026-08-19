@@ -1,3 +1,7 @@
+/*
+ * 文件作用：RTK串口实现：异步读取定位数据并管理串口重连。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_rtk/rtk_serial.hpp"
 
 #include <iterator>
@@ -8,6 +12,7 @@
 namespace cleanbot {
 namespace rtk {
 
+// 保存串口参数和回调，初始化 Asio I/O 资源。
 RtkSerial::RtkSerial(
     std::string port_name,
     const unsigned int baudrate,
@@ -22,23 +27,28 @@ RtkSerial::RtkSerial(
       serial_port_(io_service_),
       reconnect_timer_(io_service_) {}
 
+// 析构时停止后台 I/O 线程，避免回调访问已销毁对象。
 RtkSerial::~RtkSerial() { stop(); }
 
+// 启动 I/O 线程并投递首次打开串口操作。
 void RtkSerial::start() {
   if (started_.exchange(true)) {
     return;
   }
   stopping_.store(false);
   work_.reset(new boost::asio::io_service::work(io_service_));
+  // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
   io_service_.post([this]() { openSerial(); });
   io_thread_ = std::thread([this]() { io_service_.run(); });
 }
 
+// 取消读写、关闭串口并等待 I/O 线程退出。
 void RtkSerial::stop() {
   if (!started_.exchange(false)) {
     return;
   }
   stopping_.store(true);
+  // 异步任务作用：在 I/O 线程中串行执行当前状态变更或资源操作。
   io_service_.post([this]() {
     boost::system::error_code ignored;
     reconnect_timer_.cancel(ignored);
@@ -56,6 +66,7 @@ void RtkSerial::stop() {
   io_service_.reset();
 }
 
+// 将外部线程提交的差分数据投递到 I/O 线程写队列。
 void RtkSerial::enqueueWrite(const std::vector<std::uint8_t>& bytes) {
   if (!started_.load() || stopping_.load() || bytes.empty()) {
     return;
@@ -63,8 +74,10 @@ void RtkSerial::enqueueWrite(const std::vector<std::uint8_t>& bytes) {
   io_service_.post([this, bytes]() { enqueueWriteOnIo(bytes); });
 }
 
+// 返回原子保存的串口连接状态。
 bool RtkSerial::connected() const { return connected_.load(); }
 
+// 尝试打开、配置串口并在成功后启动读取流程。
 void RtkSerial::openSerial() {
   if (stopping_.load() || serial_port_.is_open()) {
     return;
@@ -106,6 +119,7 @@ void RtkSerial::openSerial() {
   beginRead();
 }
 
+// 按配置向接收机发送保存配置命令。
 void RtkSerial::configureReceiver() {
   const std::string commands[] = {
       "unlog\r\n",
@@ -121,17 +135,20 @@ void RtkSerial::configureReceiver() {
   }
 }
 
+// 投递一次异步串口读取。
 void RtkSerial::beginRead() {
   if (stopping_.load() || !serial_port_.is_open()) {
     return;
   }
   serial_port_.async_read_some(
       boost::asio::buffer(read_buffer_),
+      // 异步回调作用：处理读取完成事件，分发收到的数据或进入错误恢复流程。
       [this](const boost::system::error_code& error, const std::size_t bytes_transferred) {
         onRead(error, bytes_transferred);
       });
 }
 
+// 分发读取到的字节，或处理读失败后的重连。
 void RtkSerial::onRead(
     const boost::system::error_code& error, const std::size_t bytes_transferred) {
   if (error) {
@@ -148,6 +165,7 @@ void RtkSerial::onRead(
   beginRead();
 }
 
+// 在 I/O 线程内限制队列长度并安排写入。
 void RtkSerial::enqueueWriteOnIo(const std::vector<std::uint8_t>& bytes) {
   if (!connected_.load() || !serial_port_.is_open()) {
     return;
@@ -165,6 +183,7 @@ void RtkSerial::enqueueWriteOnIo(const std::vector<std::uint8_t>& bytes) {
   }
 }
 
+// 开始发送写队列队首的一帧数据。
 void RtkSerial::beginWrite() {
   if (write_queue_.empty() || !serial_port_.is_open()) {
     write_in_progress_ = false;
@@ -174,11 +193,13 @@ void RtkSerial::beginWrite() {
   const auto active_frame = write_queue_.front();
   boost::asio::async_write(
       serial_port_, boost::asio::buffer(*active_frame),
+      // 异步回调作用：处理写入完成事件，释放当前帧并继续发送队列。
       [this, active_frame](const boost::system::error_code& error, std::size_t) {
         onWrite(error);
       });
 }
 
+// 处理写完成，继续下一帧或切换至错误恢复。
 void RtkSerial::onWrite(const boost::system::error_code& error) {
   if (error) {
     if (!stopping_.load()) {
@@ -193,6 +214,7 @@ void RtkSerial::onWrite(const boost::system::error_code& error) {
   beginWrite();
 }
 
+// 统一处理串口传输错误、状态通知和重连安排。
 void RtkSerial::handleTransportError(
     const std::string& operation, const boost::system::error_code& error) {
   boost::system::error_code ignored;
@@ -204,12 +226,14 @@ void RtkSerial::handleTransportError(
   scheduleReconnect();
 }
 
+// 防止重复排程，并在延时后重试打开串口。
 void RtkSerial::scheduleReconnect() {
   if (stopping_.load() || reconnect_pending_) {
     return;
   }
   reconnect_pending_ = true;
   reconnect_timer_.expires_from_now(boost::posix_time::seconds(1));
+  // 定时回调作用：处理定时器到期事件，并执行超时检查或重连操作。
   reconnect_timer_.async_wait([this](const boost::system::error_code& error) {
     reconnect_pending_ = false;
     if (!error && !stopping_.load()) {
@@ -218,6 +242,7 @@ void RtkSerial::scheduleReconnect() {
   });
 }
 
+// 更新原子连接状态并将状态变化通知上层节点。
 void RtkSerial::notifyConnection(
     const bool connected, const std::string& detail) {
   connected_.store(connected);

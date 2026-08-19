@@ -1,3 +1,7 @@
+/*
+ * 文件作用：配置管理节点实现：提供参数校验、持久化和配置快照服务。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -20,6 +24,7 @@ namespace cleanbot {
 namespace config {
 namespace {
 
+// 将内部配置值类型转换为配置服务返回的稳定文本名称。
 std::string value_type_name(const ConfigValueType type) {
   switch (type) {
     case ConfigValueType::kInteger:
@@ -38,6 +43,7 @@ std::string value_type_name(const ConfigValueType type) {
 
 class ConfigManagerNode : public rclcpp::Node {
  public:
+  // 构造配置管理节点，打开配置仓库并创建查询、更新服务和状态发布器。
   ConfigManagerNode() : Node("config_manager_node") {
     state_ = "STARTING";
     const auto database_path = declare_parameter<std::string>(
@@ -237,6 +243,7 @@ class ConfigManagerNode : public rclcpp::Node {
 }  // namespace config
 }  // namespace cleanbot
 
+// 初始化 ROS 2，运行配置管理节点，并在退出前完成清理。
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<cleanbot::config::ConfigManagerNode>());

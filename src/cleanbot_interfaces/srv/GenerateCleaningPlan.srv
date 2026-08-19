@@ -1,3 +1,4 @@
+# 文件作用：定义从指定模型版本生成清扫计划的服务接口。
 string model_id
 uint64 model_version
 bool confirm_preview

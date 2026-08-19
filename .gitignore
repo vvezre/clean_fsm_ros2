@@ -1,3 +1,4 @@
+# 文件作用：排除构建产物、编辑器状态、缓存和本地临时目录，避免误提交。
 /.worktrees/
 
 # ROS / colcon outputs

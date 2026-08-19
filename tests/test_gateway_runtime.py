@@ -1,3 +1,4 @@
+# 文件作用：验证 gateway runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -38,6 +39,7 @@ cppyy.cppdef(
 
 
 class GatewayRuntimeTest(unittest.TestCase):
+    # 辅助方法：为 command 测试场景准备输入、执行操作或整理结果。
     def command(self, name="joystick_move", timestamp=100):
         command = cppyy.gbl.cleanbot.gateway.CloudCommandInput()
         command.command_id = "cmd_1"
@@ -49,6 +51,7 @@ class GatewayRuntimeTest(unittest.TestCase):
         command.has_joystick_params = True
         return command
 
+    # 测试作用：验证“joystick_uses_immediate_configured_speed”场景的契约、输出结果和边界行为。
     def test_joystick_uses_immediate_configured_speed(self):
         parameters = cppyy.gbl.cleanbot.gateway.CloudCommandParameters()
         parameters.joystick.max_linear_speed = 600
@@ -60,6 +63,7 @@ class GatewayRuntimeTest(unittest.TestCase):
         self.assertEqual(result.x_speed, 600)
         self.assertFalse(result.brake)
 
+    # 测试作用：验证“release_brakes_and_stale_message_is_rejected”场景的契约、输出结果和边界行为。
     def test_release_brakes_and_stale_message_is_rejected(self):
         translator = cppyy.gbl.cleanbot.gateway.CloudCommandTranslator()
         released = self.command()
@@ -71,6 +75,7 @@ class GatewayRuntimeTest(unittest.TestCase):
         self.assertFalse(stale.accepted)
         self.assertEqual(stale.code, "JOYSTICK_COMMAND_EXPIRED")
 
+    # 测试作用：验证“parking_maps_to_emergency_stop”场景的契约、输出结果和边界行为。
     def test_parking_maps_to_emergency_stop(self):
         translator = cppyy.gbl.cleanbot.gateway.CloudCommandTranslator()
         result = translator.translate(self.command(name="parking"), 100)

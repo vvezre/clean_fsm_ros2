@@ -1,3 +1,7 @@
+/*
+ * 文件作用：用户控制请求实现：解析并校验手动控制请求字段。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_http/user_control_request.hpp"
 
 #include <cstdint>
@@ -6,6 +10,7 @@ namespace cleanbot {
 namespace http {
 namespace {
 
+// 构造统一的用户控制请求拒绝结果。
 UserControlDecision rejection(
     const std::string& code,
     const std::string& message) {
@@ -15,6 +20,7 @@ UserControlDecision rejection(
   return result;
 }
 
+// 使用扩展整数避免取绝对值溢出，判断速度是否位于对称限幅内。
 bool withinLimit(const std::int32_t value, const std::int32_t limit) {
   if (limit < 0) {
     return false;
@@ -26,6 +32,7 @@ bool withinLimit(const std::int32_t value, const std::int32_t limit) {
 
 }  // namespace
 
+// 校验来源和速度限幅，构造人工驾驶命令；制动时强制速度归零。
 UserControlDecision build_manual_command(
     const std::string& source,
     const std::int32_t x_speed,
@@ -59,6 +66,7 @@ UserControlDecision build_manual_command(
   return result;
 }
 
+// 校验急停来源和原因，构造零速制动命令。
 UserControlDecision build_emergency_command(
     const std::string& source,
     const std::string& reason) {

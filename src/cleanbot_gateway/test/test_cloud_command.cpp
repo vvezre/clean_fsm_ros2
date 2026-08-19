@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include "cleanbot_gateway/cloud_command.hpp"
@@ -9,6 +10,7 @@ using cleanbot::gateway::CloudCommandKind;
 using cleanbot::gateway::CloudCommandParameters;
 using cleanbot::gateway::CloudCommandTranslator;
 
+// 辅助函数作用：为测试场景提供 joystick 所需的准备、执行或清理逻辑。
 CloudCommandInput joystick(const std::int64_t timestamp) {
   CloudCommandInput input;
   input.command_id = "cmd_1";
@@ -20,6 +22,7 @@ CloudCommandInput joystick(const std::int64_t timestamp) {
   return input;
 }
 
+// 测试目的：验证 CloudCommandTranslator.MapsJoystickWithConfiguredMaximumSpeed 场景的行为、状态变化和边界条件。
 TEST(CloudCommandTranslator, MapsJoystickWithConfiguredMaximumSpeed) {
   CloudCommandParameters parameters;
   parameters.joystick.max_linear_speed = 600;
@@ -33,6 +36,7 @@ TEST(CloudCommandTranslator, MapsJoystickWithConfiguredMaximumSpeed) {
   EXPECT_FALSE(result.brake);
 }
 
+// 测试目的：验证 CloudCommandTranslator.ReleaseProducesManualBrake 场景的行为、状态变化和边界条件。
 TEST(CloudCommandTranslator, ReleaseProducesManualBrake) {
   CloudCommandTranslator translator;
   auto input = joystick(100);
@@ -47,6 +51,7 @@ TEST(CloudCommandTranslator, ReleaseProducesManualBrake) {
   EXPECT_EQ(result.x_speed, 0);
 }
 
+// 测试目的：验证 CloudCommandTranslator.RejectsRetainedAndExpiredJoystickCommands 场景的行为、状态变化和边界条件。
 TEST(CloudCommandTranslator, RejectsRetainedAndExpiredJoystickCommands) {
   CloudCommandTranslator translator;
   auto retained = joystick(100);
@@ -60,6 +65,7 @@ TEST(CloudCommandTranslator, RejectsRetainedAndExpiredJoystickCommands) {
   EXPECT_EQ(expired.code, "JOYSTICK_COMMAND_EXPIRED");
 }
 
+// 测试目的：验证 CloudCommandTranslator.RejectsMissingJoystickParameters 场景的行为、状态变化和边界条件。
 TEST(CloudCommandTranslator, RejectsMissingJoystickParameters) {
   CloudCommandTranslator translator;
   auto input = joystick(100);
@@ -71,6 +77,7 @@ TEST(CloudCommandTranslator, RejectsMissingJoystickParameters) {
   EXPECT_EQ(result.code, "JOYSTICK_PARAMS_INVALID");
 }
 
+// 测试目的：验证 CloudCommandTranslator.ParkingAndStopAreSoftwareEmergencyStops 场景的行为、状态变化和边界条件。
 TEST(CloudCommandTranslator, ParkingAndStopAreSoftwareEmergencyStops) {
   CloudCommandTranslator translator;
   CloudCommandInput input;

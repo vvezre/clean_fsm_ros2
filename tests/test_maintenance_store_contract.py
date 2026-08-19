@@ -1,3 +1,4 @@
+# 文件作用：验证 maintenance store contract 相关契约、运行逻辑和边界条件。
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,7 @@ NATIVE_TEST = PACKAGE / "test" / "test_maintenance_store.cpp"
 
 
 class MaintenanceStoreContractTest(unittest.TestCase):
+    # 测试作用：验证“ros_free_store_files_are_present”场景的契约、输出结果和边界行为。
     def test_ros_free_store_files_are_present(self):
         self.assertTrue(HEADER.is_file(), "maintenance store header is missing")
         self.assertTrue(SOURCE.is_file(), "maintenance store source is missing")
@@ -18,6 +20,7 @@ class MaintenanceStoreContractTest(unittest.TestCase):
             "maintenance store native test is missing",
         )
 
+    # 测试作用：验证“store_exposes_only_monotonic_transitions”场景的契约、输出结果和边界行为。
     def test_store_exposes_only_monotonic_transitions(self):
         header = HEADER.read_text(encoding="utf-8")
         for token in (
@@ -35,6 +38,7 @@ class MaintenanceStoreContractTest(unittest.TestCase):
         for forbidden in (" save(", " clear("):
             self.assertNotIn(forbidden, header)
 
+    # 测试作用：验证“linux_store_uses_guarded_durable_atomic_replace”场景的契约、输出结果和边界行为。
     def test_linux_store_uses_guarded_durable_atomic_replace(self):
         source = SOURCE.read_text(encoding="utf-8")
         for token in (
@@ -49,6 +53,7 @@ class MaintenanceStoreContractTest(unittest.TestCase):
         ):
             self.assertIn(token, source)
 
+    # 测试作用：验证“windows_backend_is_macro_safe_and_anchors_local_path_chain”场景的契约、输出结果和边界行为。
     def test_windows_backend_is_macro_safe_and_anchors_local_path_chain(self):
         source = SOURCE.read_text(encoding="utf-8")
         self.assertLess(
@@ -75,6 +80,7 @@ class MaintenanceStoreContractTest(unittest.TestCase):
         anchor_body = source[anchor_start:anchor_end]
         self.assertNotIn("FILE_SHARE_DELETE", anchor_body)
 
+    # 测试作用：验证“commit_results_are_built_before_nonthrowing_commit_point”场景的契约、输出结果和边界行为。
     def test_commit_results_are_built_before_nonthrowing_commit_point(self):
         source = SOURCE.read_text(encoding="utf-8")
         for token in (
@@ -120,6 +126,7 @@ class MaintenanceStoreContractTest(unittest.TestCase):
         )
         self.assertIn("return std::move(result)", wrapper)
 
+    # 测试作用：验证“store_is_registered_with_json_linkage”场景的契约、输出结果和边界行为。
     def test_store_is_registered_with_json_linkage(self):
         cmake = (PACKAGE / "CMakeLists.txt").read_text(encoding="utf-8")
         for token in (

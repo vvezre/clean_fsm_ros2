@@ -1,3 +1,9 @@
+/*
+ * 文件作用：实现串口命令的有界稳定优先级队列和连续命令合并。
+ *
+ * 刹车/安全命令优先于有限动作，有限动作优先于高频连续速度命令。
+ * 队首可能正在Boost.Asio异步写入，preserve_front为true时绝不移动或替换它。
+ */
 #include "cleanbot_hardware/write_queue.hpp"
 
 #include <algorithm>
@@ -36,6 +42,7 @@ bool PriorityWriteQueue::enqueue(
     return false;
   }
 
+  // 正在写入的队首从可修改区排除，后续合并和淘汰只能操作等待项。
   const std::size_t first_mutable = preserve_front && !items_.empty() ? 1u : 0u;
   if (!coalescing_key.empty()) {
     for (std::size_t index = first_mutable; index < items_.size(); ++index) {
@@ -50,8 +57,9 @@ bool PriorityWriteQueue::enqueue(
   }
 
   if (items_.size() >= max_size_) {
+    // 队列满时只淘汰严格低于新命令优先级的等待项；Safety及以上不会被低级命令挤掉。
     std::size_t discard_index = items_.size();
-    WritePriority discard_priority = WritePriority::kProtocolAck;
+    WritePriority discard_priority = WritePriority::kCritical;
     for (std::size_t index = first_mutable; index < items_.size(); ++index) {
       if (items_[index].priority >= WritePriority::kSafety ||
           items_[index].priority >= priority) {
@@ -77,6 +85,7 @@ bool PriorityWriteQueue::enqueue(
   item.priority = priority;
   item.coalescing_key = coalescing_key;
   item.callback = std::move(callback);
+  // 同优先级保持先来先发；新命令插入到所有同级旧命令之后。
   auto position = items_.begin() + static_cast<std::ptrdiff_t>(first_mutable);
   while (position != items_.end() && position->priority >= priority) {
     ++position;

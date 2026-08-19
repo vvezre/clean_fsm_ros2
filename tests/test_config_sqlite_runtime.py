@@ -1,3 +1,4 @@
+# 文件作用：验证 config sqlite runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import shutil
@@ -55,16 +56,20 @@ if RUNTIME_AVAILABLE:
 
 
 class ConfigSqliteRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         self.temp_dir = Path(tempfile.mkdtemp(prefix="cleanbot-config-"))
 
+    # 测试清理：回收当前用例产生的临时文件、进程和状态。
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    # 测试作用：验证“repository_source_exists”场景的契约、输出结果和边界行为。
     def test_repository_source_exists(self):
         self.assertTrue(REPOSITORY_HEADER.is_file())
         self.assertTrue(REPOSITORY_SOURCE.is_file())
 
+    # 测试作用：验证“first_open_creates_schema_and_only_approved_defaults”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "SQLite repository implementation is not present")
     def test_first_open_creates_schema_and_only_approved_defaults(self):
         registry = cppyy.gbl.cleanbot.config.ConfigRegistry()
@@ -83,6 +88,7 @@ class ConfigSqliteRuntimeTest(unittest.TestCase):
         self.assertEqual(values.count("hardware.lower_machine_port"), 0)
         self.assertEqual(values.count("rtk.port"), 0)
 
+    # 测试作用：验证“transaction_write_increments_revision_and_survives_reopen”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "SQLite repository implementation is not present")
     def test_transaction_write_increments_revision_and_survives_reopen(self):
         registry = cppyy.gbl.cleanbot.config.ConfigRegistry()
@@ -111,6 +117,7 @@ class ConfigSqliteRuntimeTest(unittest.TestCase):
         self.assertEqual(values["hardware.lower_machine_port"], "/dev/ttyTHS1")
         self.assertEqual(values["motion.base_forward_speed"], "420")
 
+    # 测试作用：验证“missing_parent_directory_is_reported_without_silent_creation”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "SQLite repository implementation is not present")
     def test_missing_parent_directory_is_reported_without_silent_creation(self):
         registry = cppyy.gbl.cleanbot.config.ConfigRegistry()

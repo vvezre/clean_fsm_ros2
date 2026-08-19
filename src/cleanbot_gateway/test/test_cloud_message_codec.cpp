@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include <nlohmann/json.hpp>
@@ -10,6 +11,7 @@ cleanbot::gateway::CloudIdentity identity() {
   return {"ZTZN-PVC", "-T01", "250001"};
 }
 
+// 测试目的：验证 CloudMessageCodec.DecodesExistingCloudEnvelope 场景的行为、状态变化和边界条件。
 TEST(CloudMessageCodec, DecodesExistingCloudEnvelope) {
   cleanbot::gateway::CloudMessageCodec codec(identity());
   const std::string payload = R"({
@@ -36,6 +38,7 @@ TEST(CloudMessageCodec, DecodesExistingCloudEnvelope) {
   EXPECT_DOUBLE_EQ(result.command.dir_y, 0.75);
 }
 
+// 测试目的：验证 CloudMessageCodec.RejectsMessageForAnotherRobot 场景的行为、状态变化和边界条件。
 TEST(CloudMessageCodec, RejectsMessageForAnotherRobot) {
   cleanbot::gateway::CloudMessageCodec codec(identity());
   const auto result = codec.decode(R"({
@@ -50,6 +53,7 @@ TEST(CloudMessageCodec, RejectsMessageForAnotherRobot) {
   EXPECT_EQ(result.code, "DEVICE_IDENTITY_MISMATCH");
 }
 
+// 测试目的：验证 CloudMessageCodec.EncodesAckAndCommandResultForCloudTracking 场景的行为、状态变化和边界条件。
 TEST(CloudMessageCodec, EncodesAckAndCommandResultForCloudTracking) {
   cleanbot::gateway::CloudMessageCodec codec(identity());
   cleanbot::gateway::CloudCommandInput command;

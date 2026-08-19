@@ -1,3 +1,4 @@
+# 文件作用：验证 modeling recognition runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -30,6 +31,7 @@ SOURCES = (
 CORE_LOADED = False
 
 
+# 辅助方法：读取或加载 load_core 所需的测试数据并返回解析结果。
 def load_core(test_case):
     global CORE_LOADED
     for source in SOURCES:
@@ -49,6 +51,7 @@ def load_core(test_case):
     CORE_LOADED = True
 
 
+# 辅助方法：构造 make_group 所需的测试对象、参数或临时资源。
 def make_group(points):
     api = cppyy.gbl.cleanbot.modeling
     group = api.ModelGroup()
@@ -69,10 +72,12 @@ def make_group(points):
 
 
 class ModelingRecognitionRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         load_core(self)
         self.api = cppyy.gbl.cleanbot.modeling
 
+    # 测试作用：验证“rectangle_becomes_one_confirmed_sub_area”场景的契约、输出结果和边界行为。
     def test_rectangle_becomes_one_confirmed_sub_area(self):
         group = make_group(((0, 0), (1000, 0), (1000, 600), (0, 600)))
 
@@ -87,6 +92,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
             all(point.role == "boundary_corner" for point in result.group.points)
         )
 
+    # 测试作用：验证“boundary_geometry_is_not_guessed_as_connector”场景的契约、输出结果和边界行为。
     def test_boundary_geometry_is_not_guessed_as_connector(self):
         group = make_group(
             (
@@ -109,6 +115,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertEqual(len(result.group.connectors), 0)
         self.assertEqual(len(result.group.sub_areas), 1)
 
+    # 测试作用：验证“straight_boundary_helper_is_not_connector”场景的契约、输出结果和边界行为。
     def test_straight_boundary_helper_is_not_connector(self):
         group = make_group(
             ((0, 0), (1000, 0), (1000, 250), (980, 500), (1000, 750), (1000, 1000), (0, 1000))
@@ -123,6 +130,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertEqual(roles["p4"], "boundary_assist")
         self.assertEqual(roles["p5"], "boundary_assist")
 
+    # 测试作用：验证“unordered_convex_boundary_is_recovered”场景的契约、输出结果和边界行为。
     def test_unordered_convex_boundary_is_recovered(self):
         group = make_group(((0, 0), (1000, 1000), (0, 1000), (1000, 0)))
 
@@ -132,6 +140,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertEqual(result.status, "recognized")
         self.assertEqual(len(result.group.sub_areas), 1)
 
+    # 测试作用：验证“unordered_concave_boundary_waits_for_confirmation”场景的契约、输出结果和边界行为。
     def test_unordered_concave_boundary_waits_for_confirmation(self):
         group = make_group(
             (
@@ -147,6 +156,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertTrue(result.needs_confirmation)
         self.assertFalse(result.group.sub_areas[0].confirmed)
 
+    # 测试作用：验证“duplicate_boundary_point_is_rejected”场景的契约、输出结果和边界行为。
     def test_duplicate_boundary_point_is_rejected(self):
         group = make_group(
             ((0, 0), (1000, 0), (1000, 600), (1000, 600), (0, 600))
@@ -157,6 +167,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.code, "DUPLICATE_BOUNDARY_POINT")
 
+    # 测试作用：验证“l_shape_keeps_six_boundary_corners”场景的契约、输出结果和边界行为。
     def test_l_shape_keeps_six_boundary_corners(self):
         group = make_group(
             ((0, 0), (800, 0), (800, 300), (300, 300), (300, 800), (0, 800))
@@ -172,6 +183,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
             6,
         )
 
+    # 测试作用：验证“manual_connector_splits_two_ordered_sub_areas”场景的契约、输出结果和边界行为。
     def test_manual_connector_splits_two_ordered_sub_areas(self):
         group = make_group(
             (
@@ -194,6 +206,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertEqual(connector.to_sub_area_id, "g1-sa2")
         self.assertTrue(connector.confirmed)
 
+    # 测试作用：验证“three_sub_areas_form_a_confirmed_chain”场景的契约、输出结果和边界行为。
     def test_three_sub_areas_form_a_confirmed_chain(self):
         group = make_group(
             (
@@ -214,6 +227,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertEqual(result.group.connectors[1].from_sub_area_id, "g1-sa2")
         self.assertEqual(result.group.connectors[1].to_sub_area_id, "g1-sa3")
 
+    # 测试作用：验证“unpaired_connection_point_is_rejected”场景的契约、输出结果和边界行为。
     def test_unpaired_connection_point_is_rejected(self):
         group = make_group(
             (
@@ -228,6 +242,7 @@ class ModelingRecognitionRuntimeTest(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.code, "CONNECTION_POINTS_UNPAIRED")
 
+    # 测试作用：验证“local_coordinate_conversion_uses_centimetres”场景的契约、输出结果和边界行为。
     def test_local_coordinate_conversion_uses_centimetres(self):
         point = self.api.lat_lon_to_local_cm(31.2, 121.5, 31.20001, 121.50001)
 

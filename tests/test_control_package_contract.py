@@ -1,3 +1,4 @@
+# 文件作用：验证 control package contract 相关契约、运行逻辑和边界条件。
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -9,6 +10,7 @@ PACKAGE = SRC / "cleanbot_control"
 
 
 class ControlPackageContractTest(unittest.TestCase):
+    # 测试作用：验证“package_contains_control_cores_nodes_and_tests”场景的契约、输出结果和边界行为。
     def test_package_contains_control_cores_nodes_and_tests(self):
         required = (
             "package.xml",
@@ -28,6 +30,7 @@ class ControlPackageContractTest(unittest.TestCase):
         missing = [item for item in required if not (PACKAGE / item).is_file()]
         self.assertEqual(missing, [])
 
+    # 测试作用：验证“package_targets_humble_cpp17”场景的契约、输出结果和边界行为。
     def test_package_targets_humble_cpp17(self):
         root = ET.parse(str(PACKAGE / "package.xml")).getroot()
         self.assertEqual(root.findtext("name"), "cleanbot_control")
@@ -38,6 +41,7 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn("add_executable(tracking_node", cmake)
         self.assertIn("add_executable(command_arbiter_node", cmake)
 
+    # 测试作用：验证“topics_match_stage_four_ownership”场景的契约、输出结果和边界行为。
     def test_topics_match_stage_four_ownership(self):
         tracking = (PACKAGE / "src/tracking_node.cpp").read_text(encoding="utf-8")
         arbiter = (PACKAGE / "src/command_arbiter_node.cpp").read_text(encoding="utf-8")
@@ -60,6 +64,7 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertNotIn("create_publisher<cleanbot_interfaces::msg::VehicleCommand>(\n        \"/control/final_cmd\"", tracking)
         self.assertIn('"/control/final_cmd"', hardware)
 
+    # 测试作用：验证“tracking_interfaces_exist_and_are_generated”场景的契约、输出结果和边界行为。
     def test_tracking_interfaces_exist_and_are_generated(self):
         interfaces = SRC / "cleanbot_interfaces"
         for item in ("msg/TrackingTarget.msg", "msg/TrackingStatus.msg"):
@@ -68,6 +73,7 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn('"msg/TrackingTarget.msg"', cmake)
         self.assertIn('"msg/TrackingStatus.msg"', cmake)
 
+    # 测试作用：验证“tracking_status_publishes_signed_remaining_distance”场景的契约、输出结果和边界行为。
     def test_tracking_status_publishes_signed_remaining_distance(self):
         status = (
             SRC / "cleanbot_interfaces/msg/TrackingStatus.msg"
@@ -77,6 +83,7 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn("float64 signed_remaining_m", status)
         self.assertIn("status.signed_remaining_m = signed_remaining", tracking)
 
+    # 测试作用：验证“command_leases_are_validated_by_the_config_registry”场景的契约、输出结果和边界行为。
     def test_command_leases_are_validated_by_the_config_registry(self):
         source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(encoding="utf-8")
         registry = (
@@ -94,10 +101,12 @@ class ControlPackageContractTest(unittest.TestCase):
             registry,
         )
 
+    # 测试作用：验证“integer_configuration_is_read_with_int64_snapshot_api”场景的契约、输出结果和边界行为。
     def test_integer_configuration_is_read_with_int64_snapshot_api(self):
         tracking = (PACKAGE / "src/tracking_node.cpp").read_text(encoding="utf-8")
         self.assertIn('snapshot.get_integer("tracking.max_z_speed")', tracking)
 
+    # 测试作用：验证“arbiter_preserves_producer_request_id_before_allocating_final_id”场景的契约、输出结果和边界行为。
     def test_arbiter_preserves_producer_request_id_before_allocating_final_id(self):
         core = (
             PACKAGE / "include/cleanbot_control/command_arbiter_core.hpp"
@@ -112,6 +121,7 @@ class ControlPackageContractTest(unittest.TestCase):
         self.assertIn("left.request_id == right.request_id", source)
         self.assertIn("message.command_id = next_output_command_id_++", source)
 
+    # 测试作用：验证“arbiter_subscribes_to_latched_maintenance_state_and_caches_it”场景的契约、输出结果和边界行为。
     def test_arbiter_subscribes_to_latched_maintenance_state_and_caches_it(self):
         source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(
             encoding="utf-8"
@@ -133,6 +143,7 @@ class ControlPackageContractTest(unittest.TestCase):
             source,
         )
 
+    # 测试作用：验证“arbiter_tracks_maintenance_publisher_gid_and_forces_one_republish”场景的契约、输出结果和边界行为。
     def test_arbiter_tracks_maintenance_publisher_gid_and_forces_one_republish(self):
         source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(
             encoding="utf-8"
@@ -165,6 +176,7 @@ class ControlPackageContractTest(unittest.TestCase):
             cmake,
         )
 
+    # 测试作用：验证“arbiter_applies_cached_maintenance_before_first_configured_output”场景的契约、输出结果和边界行为。
     def test_arbiter_applies_cached_maintenance_before_first_configured_output(self):
         source = (PACKAGE / "src/command_arbiter_node.cpp").read_text(
             encoding="utf-8"

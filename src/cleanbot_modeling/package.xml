@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
+<!-- 文件作用：声明清扫建模 ROS 2 包的名称、依赖和导出信息。 -->
 <package format="3">
   <name>cleanbot_modeling</name>
   <version>0.1.0</version>

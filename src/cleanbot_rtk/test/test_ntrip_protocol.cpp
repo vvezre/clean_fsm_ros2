@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@ using cleanbot::rtk::NtripConfig;
 using cleanbot::rtk::NtripResponseParser;
 using cleanbot::rtk::build_ntrip_request;
 
+// 测试目的：验证 NtripProtocol.BuildsAuthenticatedRequest 场景的行为、状态变化和边界条件。
 TEST(NtripProtocol, BuildsAuthenticatedRequest) {
   NtripConfig config;
   config.host = "caster.example";
@@ -25,6 +27,7 @@ TEST(NtripProtocol, BuildsAuthenticatedRequest) {
   EXPECT_NE(request.find("Authorization: Basic dXNlcjpwYXNz"), std::string::npos);
 }
 
+// 测试目的：验证 NtripProtocol.PreservesRtcmInResponsePacket 场景的行为、状态变化和边界条件。
 TEST(NtripProtocol, PreservesRtcmInResponsePacket) {
   NtripResponseParser parser;
   const std::vector<std::uint8_t> packet{

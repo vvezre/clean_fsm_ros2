@@ -1,3 +1,4 @@
+# 文件作用：定义单次 Cleanbot 稳定版本检查与安全升级任务。
 [Unit]
 Description=Check and safely apply a Cleanbot release
 Wants=network-online.target

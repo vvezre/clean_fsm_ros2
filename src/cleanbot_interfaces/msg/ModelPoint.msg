@@ -1,3 +1,4 @@
+# 文件作用：定义 RTK 采集的建模点及其质量、角色和局部坐标消息。
 string id
 uint32 sequence
 float64 lat

@@ -1,3 +1,4 @@
+# 文件作用：定义直线跟踪算法的定位、误差和控制调试消息。
 builtin_interfaces/Time stamp
 float64 raw_lat
 float64 raw_lon

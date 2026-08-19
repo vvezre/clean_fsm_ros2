@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- 文件作用：声明可视化 ROS 2 包的名称、依赖和导出信息。 -->
+<package format="3">
+  <name>cleanbot_visualization</name>
+  <version>0.1.0</version>
+  <description>Optional RViz visualization adapters for cleanbot.</description>
+  <maintainer email="engineering@cleanbot.local">Cleanbot Engineering</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>cleanbot_interfaces</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,3 +1,4 @@
+# 文件作用：验证 mission runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -28,6 +29,7 @@ SOURCE = PACKAGE / "src" / "mission_state_machine.cpp"
 CORE_LOADED = False
 
 
+# 辅助方法：读取或加载 load_core 所需的测试数据并返回解析结果。
 def load_core(test_case):
     global CORE_LOADED
     test_case.assertTrue(HEADER.is_file(), "mission state-machine header is missing")
@@ -41,11 +43,13 @@ def load_core(test_case):
 
 
 class MissionStateMachineRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         load_core(self)
         self.state = cppyy.gbl.cleanbot.mission.MissionState
         self.machine = cppyy.gbl.cleanbot.mission.MissionStateMachine()
 
+    # 测试作用：验证“rejects_empty_plan_and_executes_matching_turn_and_tracking_events”场景的契约、输出结果和边界行为。
     def test_rejects_empty_plan_and_executes_matching_turn_and_tracking_events(self):
         self.assertFalse(self.machine.start(0))
         self.assertTrue(self.machine.start(2))
@@ -70,6 +74,7 @@ class MissionStateMachineRuntimeTest(unittest.TestCase):
         self.assertEqual(self.machine.state(), self.state.kCompleted)
         self.assertTrue(self.machine.terminal())
 
+    # 测试作用：验证“pause_and_resume_restart_the_current_segment”场景的契约、输出结果和边界行为。
     def test_pause_and_resume_restart_the_current_segment(self):
         self.assertTrue(self.machine.start(1))
         self.assertTrue(self.machine.begin_tracking(700))
@@ -80,6 +85,7 @@ class MissionStateMachineRuntimeTest(unittest.TestCase):
         self.assertEqual(self.machine.current_segment(), 0)
         self.assertFalse(self.machine.complete_tracking(700))
 
+    # 测试作用：验证“rtk_recovery_restarts_the_current_segment”场景的契约、输出结果和边界行为。
     def test_rtk_recovery_restarts_the_current_segment(self):
         self.assertTrue(self.machine.start(1))
         self.assertTrue(self.machine.begin_tracking(800))
@@ -90,6 +96,7 @@ class MissionStateMachineRuntimeTest(unittest.TestCase):
         self.assertEqual(self.machine.current_segment(), 0)
         self.assertFalse(self.machine.complete_tracking(800))
 
+    # 测试作用：验证“cancel_and_fail_are_terminal”场景的契约、输出结果和边界行为。
     def test_cancel_and_fail_are_terminal(self):
         self.assertTrue(self.machine.start(1))
         self.assertTrue(self.machine.cancel())

@@ -1,3 +1,7 @@
+/*
+ * 文件作用：RTK有效性实现：判断定位质量、固定解和数据新鲜度。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_rtk/rtk_validity.hpp"
 
 #include <cmath>
@@ -5,6 +9,7 @@
 namespace cleanbot {
 namespace rtk {
 
+// 综合连接、坐标、航向、固定解质量和新鲜度判断 RTK 是否可用于控制。
 bool is_fixed_valid(const RtkValidityInput& input) {
   return input.serial_connected &&
       input.coordinate_valid &&
@@ -18,6 +23,7 @@ bool is_fixed_valid(const RtkValidityInput& input) {
       input.gga_age_sec <= input.max_gga_age_sec;
 }
 
+// 判断 RTK 样本过期状态变化时是否需要发布状态心跳。
 bool should_publish_freshness_heartbeat(
     const bool has_sample,
     const bool serial_connected,
