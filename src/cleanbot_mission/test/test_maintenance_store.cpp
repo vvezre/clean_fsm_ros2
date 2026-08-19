@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include "cleanbot_mission/maintenance_store.hpp"
 
 #include <gtest/gtest.h>
@@ -30,6 +31,7 @@ using Json = nlohmann::json;
 
 class TemporaryDirectory {
  public:
+  // 为维护存储测试创建独立临时目录，避免用例之间共享文件。
   TemporaryDirectory() {
     static std::atomic<std::uint64_t> sequence{0u};
     const auto nonce =
@@ -40,6 +42,7 @@ class TemporaryDirectory {
     std::filesystem::create_directory(path_);
   }
 
+  // 离开作用域时恢复访问权限并删除测试生成的全部文件。
   ~TemporaryDirectory() {
     std::error_code ignored;
     std::filesystem::permissions(
@@ -59,6 +62,7 @@ class TemporaryDirectory {
     std::filesystem::remove_all(path_, ignored);
   }
 
+// 辅助函数作用：为测试场景提供 path 所需的准备、执行或清理逻辑。
   const std::filesystem::path& path() const {
     return path_;
   }
@@ -67,6 +71,7 @@ class TemporaryDirectory {
   std::filesystem::path path_;
 };
 
+// 辅助函数作用：为测试场景提供 read_bytes 所需的准备、执行或清理逻辑。
 std::string read_bytes(const std::filesystem::path& path) {
   std::ifstream input(path, std::ios::binary);
   return std::string(
@@ -74,6 +79,7 @@ std::string read_bytes(const std::filesystem::path& path) {
       std::istreambuf_iterator<char>());
 }
 
+// 辅助函数作用：为测试场景提供 write_bytes 所需的准备、执行或清理逻辑。
 void write_bytes(
     const std::filesystem::path& path,
     const std::string& bytes) {
@@ -83,11 +89,13 @@ void write_bytes(
   ASSERT_TRUE(output.good());
 }
 
+// 辅助函数作用：为测试场景提供 inactive_json 所需的准备、执行或清理逻辑。
 std::string inactive_json(const std::string& generation) {
   return "{\"schemaVersion\":1,\"lastGeneration\":" + generation +
       ",\"state\":\"inactive\",\"inhibitor\":null}\n";
 }
 
+// 辅助函数作用：为测试场景提供 active_json 所需的准备、执行或清理逻辑。
 std::string active_json(
     const std::string& generation,
     const std::string& requester = "updater",
@@ -115,6 +123,7 @@ static_assert(
 static_assert(
     std::is_nothrow_move_assignable<MaintenanceStoreResult>::value);
 
+// 测试目的：验证 MaintenanceStoreTest.MissingIsDistinctAndNeverCreatesState 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, MissingIsDistinctAndNeverCreatesState) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -128,6 +137,7 @@ TEST(MaintenanceStoreTest, MissingIsDistinctAndNeverCreatesState) {
   EXPECT_FALSE(std::filesystem::exists(state_path));
 }
 
+// 测试目的：验证 MaintenanceStoreTest.GenesisRoundTripsAndIsIdempotent 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, GenesisRoundTripsAndIsIdempotent) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -165,6 +175,7 @@ TEST(MaintenanceStoreTest, GenesisRoundTripsAndIsIdempotent) {
   EXPECT_EQ(read_bytes(state_path), bytes);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.GenesisPreservesValidActiveRecord 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, GenesisPreservesValidActiveRecord) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -185,6 +196,7 @@ TEST(MaintenanceStoreTest, GenesisPreservesValidActiveRecord) {
   EXPECT_EQ(read_bytes(state_path), before);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.ActiveReleaseRestartAndNextGenerationRoundTrip 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, ActiveReleaseRestartAndNextGenerationRoundTrip) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -229,6 +241,7 @@ TEST(MaintenanceStoreTest, ActiveReleaseRestartAndNextGenerationRoundTrip) {
   EXPECT_EQ(next.record->inhibitor->generation, 2u);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.SameRequesterIsIdempotentAndKeepsOriginalReason 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, SameRequesterIsIdempotentAndKeepsOriginalReason) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -252,6 +265,7 @@ TEST(MaintenanceStoreTest, SameRequesterIsIdempotentAndKeepsOriginalReason) {
   EXPECT_EQ(read_bytes(state_path), before);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.DifferentRequesterAndTokenMismatchLeaveBytesUnchanged 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, DifferentRequesterAndTokenMismatchLeaveBytesUnchanged) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -280,6 +294,7 @@ TEST(MaintenanceStoreTest, DifferentRequesterAndTokenMismatchLeaveBytesUnchanged
   EXPECT_EQ(read_bytes(state_path), active_bytes);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.RejectsMalformedRecordsWithoutThrowing 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, RejectsMalformedRecordsWithoutThrowing) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -340,6 +355,7 @@ TEST(MaintenanceStoreTest, RejectsMalformedRecordsWithoutThrowing) {
   }
 }
 
+// 测试目的：验证 MaintenanceStoreTest.UnsupportedSchemaIsDistinct 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, UnsupportedSchemaIsDistinct) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -356,6 +372,7 @@ TEST(MaintenanceStoreTest, UnsupportedSchemaIsDistinct) {
   EXPECT_FALSE(result.committed);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.RejectsOversizedFileAndInputs 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, RejectsOversizedFileAndInputs) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -388,6 +405,7 @@ TEST(MaintenanceStoreTest, RejectsOversizedFileAndInputs) {
   EXPECT_EQ(read_bytes(state_path), before);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.MaximumGenerationIsLosslessAndNeverWraps 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, MaximumGenerationIsLosslessAndNeverWraps) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -423,6 +441,7 @@ TEST(MaintenanceStoreTest, MaximumGenerationIsLosslessAndNeverWraps) {
 }
 
 #if !defined(_WIN32)
+// 测试目的：验证 MaintenanceStoreTest.RejectsSymlinkDirectoryAndNonRegularState 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, RejectsSymlinkDirectoryAndNonRegularState) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -446,6 +465,7 @@ TEST(MaintenanceStoreTest, RejectsSymlinkDirectoryAndNonRegularState) {
   EXPECT_EQ(store.load().code, MaintenanceStoreCode::kInvalid);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.PermissionFailureIsIoError 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, PermissionFailureIsIoError) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -461,6 +481,7 @@ TEST(MaintenanceStoreTest, PermissionFailureIsIoError) {
   EXPECT_EQ(result.code, MaintenanceStoreCode::kIoError);
 }
 
+// 测试目的：验证 MaintenanceStoreTest.CreatedFilesArePrivateAndNoTempsRemain 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, CreatedFilesArePrivateAndNoTempsRemain) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -492,6 +513,7 @@ TEST(MaintenanceStoreTest, CreatedFilesArePrivateAndNoTempsRemain) {
 }
 #endif
 
+// 测试目的：验证 MaintenanceStoreTest.ConcurrentActivationsAllocateOnlyOneOwner 场景的行为、状态变化和边界条件。
 TEST(MaintenanceStoreTest, ConcurrentActivationsAllocateOnlyOneOwner) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";

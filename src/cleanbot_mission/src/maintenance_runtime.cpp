@@ -1,3 +1,7 @@
+/*
+ * 文件作用：维护运行时实现：保存维护会话状态并处理启动、暂停和恢复。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_mission/maintenance_runtime.hpp"
 
 #include <exception>
@@ -7,6 +11,7 @@
 namespace cleanbot {
 namespace mission {
 
+// 初始化持久化存储、发布者会话跟踪和保守的启动快照。
 MaintenanceRuntime::MaintenanceRuntime(
     std::filesystem::path state_path,
     const std::size_t maximum_retired_publishers,
@@ -18,6 +23,7 @@ MaintenanceRuntime::MaintenanceRuntime(
       snapshot_(initialSnapshot()),
       emergency_fault_snapshot_(emergencyFaultSnapshot()) {}
 
+// 单次读取并恢复维护持久化状态；失败时锁存存储故障。
 bool MaintenanceRuntime::initialize(const bool mission_idle) noexcept {
   if (initialized_) {
     return !store_fault_;
@@ -43,6 +49,7 @@ bool MaintenanceRuntime::initialize(const bool mission_idle) noexcept {
   return restore(*loaded.record, mission_idle);
 }
 
+// 更新任务空闲条件，并据此刷新维护门快照。
 void MaintenanceRuntime::setMissionIdle(const bool mission_idle) noexcept {
   if (store_fault_) {
     return;
@@ -62,6 +69,7 @@ void MaintenanceRuntime::setMissionIdle(const bool mission_idle) noexcept {
   }
 }
 
+// 原子持久化维护申请，建立安全门并返回当前就绪程度。
 MaintenanceTransitionResult MaintenanceRuntime::enable(
     const std::string& requester,
     const std::string& reason,
@@ -166,6 +174,7 @@ MaintenanceTransitionResult MaintenanceRuntime::enable(
   }
 }
 
+// 校验代次和申请者后原子释放维护申请及安全门。
 MaintenanceTransitionResult MaintenanceRuntime::disable(
     const std::uint64_t generation,
     const std::string& requester) noexcept {
@@ -242,6 +251,7 @@ MaintenanceTransitionResult MaintenanceRuntime::disable(
   }
 }
 
+// 将仲裁后的最终命令交给维护门作为刹车证据。
 void MaintenanceRuntime::observeFinalCommand(
     const FinalCommandEvidence& command) noexcept {
   if (!initialized_ || store_fault_) {
@@ -255,6 +265,7 @@ void MaintenanceRuntime::observeFinalCommand(
   }
 }
 
+// 将下位机命令执行状态交给维护门匹配刹车回执。
 void MaintenanceRuntime::observeCommandStatus(
     const CommandStatusEvidence& status) noexcept {
   if (!initialized_ || store_fault_) {
@@ -268,6 +279,7 @@ void MaintenanceRuntime::observeCommandStatus(
   }
 }
 
+// 验证硬件发布者会话，记录可用样本并交由维护门确认静止。
 MaintenanceHardwareObservation MaintenanceRuntime::observeHardware(
     const cleanbot::common::PublisherIdentity& publisher,
     const MaintenanceHardwareSample& sample,
@@ -327,6 +339,7 @@ MaintenanceHardwareObservation MaintenanceRuntime::observeHardware(
   }
 }
 
+// 按当前时间重算最近硬件样本的新鲜度并刷新维护门。
 void MaintenanceRuntime::refreshHardware(
     const std::uint64_t now_nanoseconds,
     const std::uint64_t freshness_timeout_nanoseconds) noexcept {
@@ -347,27 +360,33 @@ void MaintenanceRuntime::refreshHardware(
   }
 }
 
+// 返回最新的对外维护运行时快照。
 const MaintenanceRuntimeSnapshot& MaintenanceRuntime::snapshot()
     const noexcept {
   return snapshot_;
 }
 
+// 返回持久化恢复流程是否已执行。
 bool MaintenanceRuntime::initialized() const noexcept {
   return initialized_;
 }
 
+// 返回存储故障是否已被锁存。
 bool MaintenanceRuntime::storeFault() const noexcept {
   return store_fault_;
 }
 
+// 返回是否关闭了新的任务或维护准入。
 bool MaintenanceRuntime::admissionClosed() const noexcept {
   return admission_closed_;
 }
 
+// 返回维护门记录的最后有效代次。
 std::uint64_t MaintenanceRuntime::lastGeneration() const noexcept {
   return gate_.lastGeneration();
 }
 
+// 构造启动未恢复时的保守快照，默认关闭准入。
 MaintenanceRuntimeSnapshot MaintenanceRuntime::initialSnapshot() {
   MaintenanceRuntimeSnapshot result;
   result.admission_closed = true;
@@ -378,6 +397,7 @@ MaintenanceRuntimeSnapshot MaintenanceRuntime::initialSnapshot() {
   return result;
 }
 
+// 构造异常处理失败时使用的最保守故障快照。
 MaintenanceRuntimeSnapshot MaintenanceRuntime::emergencyFaultSnapshot() {
   MaintenanceRuntimeSnapshot result;
   result.initialized = true;
@@ -390,6 +410,7 @@ MaintenanceRuntimeSnapshot MaintenanceRuntime::emergencyFaultSnapshot() {
   return result;
 }
 
+// 校验从持久化存储读取的记录是否满足运行时不变式。
 bool MaintenanceRuntime::validRecord(
     const MaintenanceStoreRecord& record) noexcept {
   if (record.schema_version != 1u) {
@@ -407,6 +428,7 @@ bool MaintenanceRuntime::validRecord(
       inhibitor.reason.size() <= MaintenanceStore::kMaximumReasonBytes;
 }
 
+// 将存储结果枚举转换为稳定的对外错误码名称。
 const char* MaintenanceRuntime::storeCodeName(
     const MaintenanceStoreCode code) noexcept {
   switch (code) {
@@ -432,6 +454,7 @@ const char* MaintenanceRuntime::storeCodeName(
   return "UNKNOWN";
 }
 
+// 判断存储结果是否意味着运行时无法继续安全运行。
 bool MaintenanceRuntime::isOperationalFailure(
     const MaintenanceStoreCode code) noexcept {
   return code == MaintenanceStoreCode::kMissing ||
@@ -440,6 +463,7 @@ bool MaintenanceRuntime::isOperationalFailure(
       code == MaintenanceStoreCode::kIoError;
 }
 
+// 无抛异常地交换两个完整快照，保证状态整体更新。
 void MaintenanceRuntime::swapSnapshots(
     MaintenanceRuntimeSnapshot& lhs,
     MaintenanceRuntimeSnapshot& rhs) noexcept {
@@ -465,6 +489,7 @@ void MaintenanceRuntime::swapSnapshots(
   lhs.message.swap(rhs.message);
 }
 
+// 将有效持久化记录恢复到维护门和对外快照。
 bool MaintenanceRuntime::restore(
     const MaintenanceStoreRecord& record,
     const bool mission_idle) noexcept {
@@ -497,6 +522,7 @@ bool MaintenanceRuntime::restore(
   return true;
 }
 
+// 从持久化记录提取申请者信息并刷新健康快照。
 bool MaintenanceRuntime::refreshHealthySnapshot(
     const MaintenanceStoreRecord& record) noexcept {
   try {
@@ -512,6 +538,7 @@ bool MaintenanceRuntime::refreshHealthySnapshot(
   }
 }
 
+// 汇总维护门状态、申请者和原因，原子替换对外快照。
 bool MaintenanceRuntime::refreshHealthySnapshot(
     const std::string& requester,
     const std::string& reason) noexcept {
@@ -548,6 +575,7 @@ bool MaintenanceRuntime::refreshHealthySnapshot(
   }
 }
 
+// 使用当前快照和存储结果构造维护切换响应。
 MaintenanceTransitionResult MaintenanceRuntime::transitionResult(
     const bool accepted,
     const MaintenanceStoreCode code,
@@ -567,6 +595,7 @@ MaintenanceTransitionResult MaintenanceRuntime::transitionResult(
   }
 }
 
+// 在未初始化或故障时构造统一拒绝响应。
 MaintenanceTransitionResult MaintenanceRuntime::rejectUnavailable(
     const char* const code,
     const char* const message) const noexcept {
@@ -583,6 +612,7 @@ MaintenanceTransitionResult MaintenanceRuntime::rejectUnavailable(
   }
 }
 
+// 从当前持久化记录重新计算准入与维护门快照。
 void MaintenanceRuntime::restoreAdmissionFromRecord() noexcept {
   if (!record_.has_value() ||
       !refreshHealthySnapshot(*record_)) {
@@ -590,6 +620,7 @@ void MaintenanceRuntime::restoreAdmissionFromRecord() noexcept {
   }
 }
 
+// 当存储操作结果不确定但可能已提交时采用保守恢复策略。
 void MaintenanceRuntime::applyUncertainActivation(
     const MaintenanceStoreResult& result,
     const bool mission_idle) noexcept {
@@ -615,6 +646,7 @@ void MaintenanceRuntime::applyUncertainActivation(
   }
 }
 
+// 锁存带详细说明的存储故障，关闭所有准入。
 void MaintenanceRuntime::latchStoreFault(
     const std::string& message) noexcept {
   initialized_ = true;
@@ -648,6 +680,7 @@ void MaintenanceRuntime::latchStoreFault(
   }
 }
 
+// 在异常路径无法构造详细错误时切换到固定紧急故障快照。
 void MaintenanceRuntime::latchEmergencyFault() noexcept {
   initialized_ = true;
   store_fault_ = true;

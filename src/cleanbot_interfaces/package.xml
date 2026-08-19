@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
+<!-- 文件作用：声明共享 ROS 消息、服务和动作接口包的名称与依赖。 -->
 <package format="3">
   <name>cleanbot_interfaces</name>
   <version>0.1.0</version>

@@ -1,3 +1,7 @@
+/*
+ * 文件作用：配置注册表实现：集中定义配置键、类型、默认值和取值范围。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_config/config_registry.hpp"
 
 #include <algorithm>
@@ -10,6 +14,7 @@ namespace cleanbot {
 namespace config {
 namespace {
 
+// 构造一条配置键的类型、默认值、范围和应用策略定义。
 ConfigDefinition make_definition(
     const std::string& key,
     const ConfigValueType type,
@@ -35,6 +40,7 @@ ConfigDefinition make_definition(
   return definition;
 }
 
+// 返回转为小写后的副本，用于大小写无关的布尔值比较。
 std::string lower_copy(std::string value) {
   std::transform(
       value.begin(), value.end(), value.begin(),
@@ -44,6 +50,7 @@ std::string lower_copy(std::string value) {
   return value;
 }
 
+// 判断配置键不存在或其文本值为空。
 bool is_missing(
     const std::map<std::string, std::string>& values,
     const std::string& key) {
@@ -51,6 +58,7 @@ bool is_missing(
   return found == values.end() || found->second.empty();
 }
 
+// 严格解析整数文本，并以 double 形式返回以便统一范围校验。
 bool parse_integer(const std::string& value, double& parsed) {
   if (value.empty()) {
     return false;
@@ -65,6 +73,7 @@ bool parse_integer(const std::string& value, double& parsed) {
   return true;
 }
 
+// 严格解析有限浮点数文本。
 bool parse_double(const std::string& value, double& parsed) {
   if (value.empty()) {
     return false;
@@ -78,6 +87,7 @@ bool parse_double(const std::string& value, double& parsed) {
 
 }  // namespace
 
+// 注册系统全部配置键的默认值、合法范围和热更新策略。
 ConfigRegistry::ConfigRegistry() {
   const auto string_required = [this](const std::string& key) {
     add(make_definition(key, ConfigValueType::kString, true, "", false));
@@ -104,6 +114,8 @@ ConfigRegistry::ConfigRegistry() {
 
   string_required("hardware.lower_machine_port");
   integer_default("hardware.lower_machine_baudrate", "115200", 1, 3000000);
+  integer_default("hardware.command_repeat_count", "5", 1, 10);
+  // 仅为兼容已有SQLite配置库保留；旧Python串口协议不会读取或使用这些ACK参数。
   integer_default("hardware.command_ack_timeout_ms", "200", 1, 10000);
   integer_default("hardware.command_max_retries", "3", 0, 20);
   integer_default("hardware.command_history_size", "256", 1, 4096);
@@ -224,15 +236,18 @@ ConfigRegistry::ConfigRegistry() {
       "0.85", 0.0, 1.0);
 }
 
+// 按键名查找配置定义；未知键返回空指针。
 const ConfigDefinition* ConfigRegistry::find(const std::string& key) const {
   const auto found = definitions_.find(key);
   return found == definitions_.end() ? nullptr : &found->second;
 }
 
+// 返回只读的全部配置定义。
 const std::map<std::string, ConfigDefinition>& ConfigRegistry::definitions() const {
   return definitions_;
 }
 
+// 收集所有声明了默认值的配置键和值。
 std::map<std::string, std::string> ConfigRegistry::default_values() const {
   std::map<std::string, std::string> values;
   for (const auto& item : definitions_) {
@@ -243,6 +258,7 @@ std::map<std::string, std::string> ConfigRegistry::default_values() const {
   return values;
 }
 
+// 校验指定键和值的存在性、类型和范围。
 ValidationResult ConfigRegistry::validate_value(
     const std::string& key,
     const std::string& value) const {
@@ -286,6 +302,7 @@ ValidationResult ConfigRegistry::validate_value(
   return {true, "OK", ""};
 }
 
+// 列出必填配置及按功能开关动态要求的缺失键。
 std::vector<std::string> ConfigRegistry::missing_required(
     const std::map<std::string, std::string>& values) const {
   std::vector<std::string> missing;
@@ -322,6 +339,7 @@ std::vector<std::string> ConfigRegistry::missing_required(
   return missing;
 }
 
+// 将一项定义按键名写入注册表。
 void ConfigRegistry::add(const ConfigDefinition& definition) {
   definitions_[definition.key] = definition;
 }

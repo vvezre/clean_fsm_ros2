@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include "cleanbot_mission/maintenance_runtime.hpp"
 #include "cleanbot_common/publisher_epoch_tracker.hpp"
 
@@ -16,6 +17,7 @@ namespace {
 
 unsigned int load_count = 0u;
 
+// 辅助函数作用：为测试场景提供 result 所需的准备、执行或清理逻辑。
 MaintenanceStoreResult result(
     const MaintenanceStoreCode code,
     std::string message,
@@ -29,12 +31,14 @@ MaintenanceStoreResult result(
   return value;
 }
 
+// 辅助函数作用：为测试场景提供 inactive_record 所需的准备、执行或清理逻辑。
 MaintenanceStoreRecord inactive_record(const std::uint64_t generation) {
   MaintenanceStoreRecord record;
   record.last_generation = generation;
   return record;
 }
 
+// 辅助函数作用：为测试场景提供 active_record 所需的准备、执行或清理逻辑。
 MaintenanceStoreRecord active_record(
     const std::uint64_t generation,
     std::string requester,
@@ -48,9 +52,11 @@ MaintenanceStoreRecord active_record(
 
 }  // namespace
 
+// 辅助函数作用：为测试场景提供 MaintenanceStore 所需的准备、执行或清理逻辑。
 MaintenanceStore::MaintenanceStore(std::filesystem::path state_path)
     : state_path_(std::move(state_path)) {}
 
+// 辅助函数作用：为测试场景提供 load 所需的准备、执行或清理逻辑。
 MaintenanceStoreResult MaintenanceStore::load() const noexcept {
   ++load_count;
   const auto name = state_path_.filename().string();
@@ -111,6 +117,7 @@ MaintenanceStoreResult MaintenanceStore::load() const noexcept {
   return result(MaintenanceStoreCode::kIoError, "io error");
 }
 
+// 辅助函数作用：为测试场景提供 activate 所需的准备、执行或清理逻辑。
 MaintenanceStoreResult MaintenanceStore::activate(
     const std::string& requester,
     const std::string& reason) noexcept {
@@ -150,6 +157,7 @@ MaintenanceStoreResult MaintenanceStore::activate(
   return result(MaintenanceStoreCode::kInvalid, "invalid activate");
 }
 
+// 辅助函数作用：为测试场景提供 release 所需的准备、执行或清理逻辑。
 MaintenanceStoreResult MaintenanceStore::release(
     const std::uint64_t generation,
     const std::string& requester) noexcept {
@@ -186,17 +194,20 @@ using cleanbot::mission::MaintenanceRuntime;
 using cleanbot::mission::MaintenanceHardwareSample;
 using cleanbot::mission::MaintenanceHardwareStatus;
 
+// 辅助函数作用：为测试场景提供 check 所需的准备、执行或清理逻辑。
 void check(const bool condition, const char* const message) {
   if (!condition) {
     throw std::runtime_error(message);
   }
 }
 
+// 辅助函数作用：为测试场景提供 runtime 所需的准备、执行或清理逻辑。
 MaintenanceRuntime runtime(const std::string& name) {
   return MaintenanceRuntime(
       std::filesystem::path("C:\\maintenance-runtime-test") / name);
 }
 
+// 辅助函数作用：为测试场景提供 initial_case 所需的准备、执行或清理逻辑。
 void initial_case() {
   auto value = runtime("initial");
   const auto& snapshot = value.snapshot();
@@ -209,6 +220,7 @@ void initial_case() {
       "initial blocker must be explicit");
 }
 
+// 辅助函数作用：为测试场景提供 inactive_case 所需的准备、执行或清理逻辑。
 void inactive_case() {
   auto value = runtime("inactive");
   check(value.initialize(true), "inactive restore must succeed");
@@ -223,6 +235,7 @@ void inactive_case() {
   check(snapshot.phase == "INACTIVE", "inactive phase must be coherent");
 }
 
+// 辅助函数作用：为测试场景提供 active_case 所需的准备、执行或清理逻辑。
 void active_case() {
   auto value = runtime("active");
   check(value.initialize(false), "active restore must succeed");
@@ -241,6 +254,7 @@ void active_case() {
   check(snapshot.phase == "MISSION_BUSY", "active phase must be coherent");
 }
 
+// 辅助函数作用：为测试场景提供 fault_case 所需的准备、执行或清理逻辑。
 void fault_case(const std::string& name) {
   auto value = runtime(name);
   check(!value.initialize(true), "faulting restore must fail");
@@ -263,6 +277,7 @@ void fault_case(const std::string& name) {
       "latched fault snapshot must not mutate");
 }
 
+// 辅助函数作用：为测试场景提供 duplicate_case 所需的准备、执行或清理逻辑。
 void duplicate_case() {
   auto value = runtime("duplicate");
   check(value.initialize(true), "first initialization must succeed");
@@ -279,6 +294,7 @@ void duplicate_case() {
       "admission must not mutate");
 }
 
+// 辅助函数作用：为测试场景提供 mission_idle_case 所需的准备、执行或清理逻辑。
 void mission_idle_case() {
   auto value = runtime("mission_idle");
   check(value.initialize(false), "active restore must succeed");
@@ -296,6 +312,7 @@ void mission_idle_case() {
   check(busy.phase == "MISSION_BUSY", "busy phase must remain coherent");
 }
 
+// 辅助函数作用：为测试场景提供 restore_failure_case 所需的准备、执行或清理逻辑。
 void restore_failure_case() {
   auto value = runtime("restore_failure");
   value.setMissionIdle(true);
@@ -307,6 +324,7 @@ void restore_failure_case() {
       "restore failure phase must be explicit");
 }
 
+// 辅助函数作用：为测试场景提供 transition_case 所需的准备、执行或清理逻辑。
 void transition_case() {
   auto value = runtime("transition");
   check(value.initialize(true), "inactive restore must succeed");
@@ -329,6 +347,7 @@ void transition_case() {
       "inactive snapshot must expose last generation");
 }
 
+// 辅助函数作用：为测试场景提供 idempotent_case 所需的准备、执行或清理逻辑。
 void idempotent_case() {
   auto value = runtime("active");
   check(value.initialize(true), "active restore must succeed");
@@ -346,6 +365,7 @@ void idempotent_case() {
   check(value.snapshot().gate_active, "other owner must keep gate active");
 }
 
+// 辅助函数作用：为测试场景提供 exhausted_case 所需的准备、执行或清理逻辑。
 void exhausted_case() {
   auto value = runtime("exhausted");
   check(value.initialize(true), "inactive restore must succeed");
@@ -360,6 +380,7 @@ void exhausted_case() {
       "healthy inactive exhaustion must keep admission open");
 }
 
+// 辅助函数作用：为测试场景提供 uncertain_activate_case 所需的准备、执行或清理逻辑。
 void uncertain_activate_case() {
   auto value = runtime("uncertain_activate");
   check(value.initialize(true), "inactive restore must succeed");
@@ -375,6 +396,7 @@ void uncertain_activate_case() {
       "uncertain active generation must remain visible");
 }
 
+// 辅助函数作用：为测试场景提供 uncertain_release_case 所需的准备、执行或清理逻辑。
 void uncertain_release_case() {
   auto value = runtime("uncertain_release");
   check(value.initialize(true), "active restore must succeed");
@@ -390,6 +412,7 @@ void uncertain_release_case() {
       "uncertain release must retain active generation");
 }
 
+// 辅助函数作用：为测试场景提供 validation_case 所需的准备、执行或清理逻辑。
 void validation_case() {
   auto value = runtime("transition");
   check(value.initialize(true), "inactive restore must succeed");
@@ -411,6 +434,7 @@ void validation_case() {
       "invalid release must keep active admission closed");
 }
 
+// 辅助函数作用：为测试场景提供 publisher 所需的准备、执行或清理逻辑。
 cleanbot::common::PublisherIdentity publisher(const std::uint8_t tag) {
   cleanbot::common::PublisherIdentity identity;
   identity.implementation_identifier = "rmw_fastrtps_cpp";
@@ -418,6 +442,7 @@ cleanbot::common::PublisherIdentity publisher(const std::uint8_t tag) {
   return identity;
 }
 
+// 辅助函数作用：为测试场景提供 brake 所需的准备、执行或清理逻辑。
 cleanbot::mission::FinalCommandEvidence brake(
     const std::uint64_t generation,
     const std::uint64_t command_id) {
@@ -431,6 +456,7 @@ cleanbot::mission::FinalCommandEvidence brake(
   return command;
 }
 
+// 辅助函数作用：为测试场景提供 ack 所需的准备、执行或清理逻辑。
 cleanbot::mission::CommandStatusEvidence ack(
     const std::uint64_t generation,
     const std::uint64_t command_id) {
@@ -443,6 +469,7 @@ cleanbot::mission::CommandStatusEvidence ack(
   return status;
 }
 
+// 辅助函数作用：为测试场景提供 stopped 所需的准备、执行或清理逻辑。
 MaintenanceHardwareSample stopped(const std::uint64_t sequence) {
   MaintenanceHardwareSample sample;
   sample.frame_sequence = sequence;
@@ -450,6 +477,7 @@ MaintenanceHardwareSample stopped(const std::uint64_t sequence) {
   return sample;
 }
 
+// 辅助函数作用：为测试场景提供 evidence_case 所需的准备、执行或清理逻辑。
 void evidence_case() {
   auto value = runtime("transition");
   check(value.initialize(true), "inactive restore must succeed");
@@ -476,6 +504,7 @@ void evidence_case() {
       "stale blocker must be explicit");
 }
 
+// 辅助函数作用：为测试场景提供 publisher_case 所需的准备、执行或清理逻辑。
 void publisher_case() {
   auto value = runtime("transition");
   check(value.initialize(true), "inactive restore must succeed");
@@ -512,6 +541,7 @@ void publisher_case() {
 
 }  // namespace
 
+// 辅助函数作用：为测试场景提供 main 所需的准备、执行或清理逻辑。
 int main(const int argc, const char* const argv[]) {
   try {
     check(argc == 2, "one case name is required");

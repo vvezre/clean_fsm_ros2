@@ -1,3 +1,4 @@
+# 文件作用：定义当前跟踪任务的代次、进度、阻塞和完成状态消息。
 builtin_interfaces/Time stamp
 uint64 generation
 bool active

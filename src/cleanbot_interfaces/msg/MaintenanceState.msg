@@ -1,3 +1,4 @@
+# 文件作用：定义维护模式安全门、刹车和硬件确认状态消息。
 builtin_interfaces/Time stamp
 uint64 generation
 bool gate_active

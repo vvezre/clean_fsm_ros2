@@ -1,3 +1,4 @@
+# 文件作用：定义从任务检查点恢复执行的动作接口。
 string run_id
 ---
 bool success

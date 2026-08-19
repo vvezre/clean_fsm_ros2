@@ -1,3 +1,7 @@
+/*
+ * 文件作用：RTCM3帧缓冲实现：按长度和CRC24Q重组差分数据帧。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_rtk/rtcm3_frame_buffer.hpp"
 
 namespace cleanbot {
@@ -9,11 +13,13 @@ constexpr std::size_t kHeaderLength = 3u;
 constexpr std::size_t kCrcLength = 3u;
 }  // namespace
 
+// 以给定最大字节数创建 RTCM3 流帧缓存。
 Rtcm3FrameBuffer::Rtcm3FrameBuffer(const std::size_t max_buffer_size)
     : max_buffer_size_(max_buffer_size < kHeaderLength + kCrcLength
           ? kHeaderLength + kCrcLength
           : max_buffer_size) {}
 
+// 追加网络或串口来源的 RTCM 原始字节。
 void Rtcm3FrameBuffer::append(const std::vector<std::uint8_t>& bytes) {
   if (bytes.empty()) {
     return;
@@ -26,6 +32,7 @@ void Rtcm3FrameBuffer::append(const std::vector<std::uint8_t>& bytes) {
   }
 }
 
+// 搜索完整 RTCM3 帧，校验 CRC 后输出合法帧。
 bool Rtcm3FrameBuffer::pop(std::vector<std::uint8_t>& frame) {
   while (true) {
     std::size_t start_index = 0u;
@@ -73,14 +80,18 @@ bool Rtcm3FrameBuffer::pop(std::vector<std::uint8_t>& frame) {
   }
 }
 
+// 清空待解析 RTCM 字节。
 void Rtcm3FrameBuffer::clear() { data_.clear(); }
 
+// 返回当前缓存的字节数。
 std::size_t Rtcm3FrameBuffer::size() const { return data_.size(); }
 
+// 返回累计检测到的 CRC 错误帧数量。
 std::size_t Rtcm3FrameBuffer::invalid_crc_count() const {
   return invalid_crc_count_;
 }
 
+// 计算 RTCM3 帧使用的 CRC-24Q 校验值。
 std::uint32_t Rtcm3FrameBuffer::crc24q(
     const std::vector<std::uint8_t>& bytes, const std::size_t length) {
   std::uint32_t crc = 0u;

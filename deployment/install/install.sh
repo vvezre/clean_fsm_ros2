@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# 文件作用：安装首个 Cleanbot 发布目录、升级器、服务配置和签名公钥。
 set -euo pipefail
 
+# 方法作用：输出安装脚本参数格式并以参数错误状态退出。
 usage() {
   echo "usage: $0 RELEASE_DIRECTORY ED25519_PUBLIC_KEY [--start]" >&2
   exit 2
@@ -66,6 +68,7 @@ install -d -o cleanbot -g cleanbot -m 0750 /var/log/cleanbot/ros
 
 temporary_release=""
 temporary_link="/opt/cleanbot/.current.new.$$"
+# 方法作用：脚本异常退出时删除尚未完成的临时安装目录。
 cleanup() {
   if [[ -n ${temporary_release} && -d ${temporary_release} ]]; then
     rm -rf -- "${temporary_release}"

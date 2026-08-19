@@ -1,3 +1,4 @@
+# 文件作用：验证 http gateway hardening contract 相关契约、运行逻辑和边界条件。
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,7 @@ FRONTEND_API = WORKSPACE.parent / "clean-frontend-github" / "api" / "login.js"
 
 
 class HttpGatewayHardeningContractTest(unittest.TestCase):
+    # 测试作用：验证“async_server_and_session_are_split_from_ros_node”场景的契约、输出结果和边界行为。
     def test_async_server_and_session_are_split_from_ros_node(self):
         required = (
             "include/cleanbot_http/http_server.hpp",
@@ -25,6 +27,7 @@ class HttpGatewayHardeningContractTest(unittest.TestCase):
         self.assertNotIn("std::this_thread::sleep_for", node)
         self.assertIn("HttpServer", node)
 
+    # 测试作用：验证“sequence_guard_is_part_of_http_core”场景的契约、输出结果和边界行为。
     def test_sequence_guard_is_part_of_http_core(self):
         required = (
             "include/cleanbot_http/joystick_sequence_guard.hpp",
@@ -43,6 +46,7 @@ class HttpGatewayHardeningContractTest(unittest.TestCase):
         ):
             self.assertIn(token, router)
 
+    # 测试作用：验证“frontend_adds_sequence_only_to_joystick_requests”场景的契约、输出结果和边界行为。
     def test_frontend_adds_sequence_only_to_joystick_requests(self):
         if not FRONTEND_API.is_file():
             self.skipTest("frontend repository is not present beside ROS2 workspace")

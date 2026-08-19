@@ -1,3 +1,4 @@
+# 文件作用：验证 rtk package contract 相关契约、运行逻辑和边界条件。
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -8,6 +9,7 @@ PACKAGE = WORKSPACE / "src" / "cleanbot_rtk"
 
 
 class RtkPackageContractTest(unittest.TestCase):
+    # 测试作用：验证“rtk_package_metadata_targets_humble_cpp17”场景的契约、输出结果和边界行为。
     def test_rtk_package_metadata_targets_humble_cpp17(self):
         package_xml = PACKAGE / "package.xml"
         cmake_file = PACKAGE / "CMakeLists.txt"
@@ -28,11 +30,13 @@ class RtkPackageContractTest(unittest.TestCase):
         self.assertIn("src/rtk_validity.cpp", cmake)
         self.assertIn("ament_add_gtest(test_rtk_validity", cmake)
 
+    # 测试作用：验证“integer_configuration_uses_typed_config_snapshot”场景的契约、输出结果和边界行为。
     def test_integer_configuration_uses_typed_config_snapshot(self):
         source = (PACKAGE / "src/rtk_node.cpp").read_text(encoding="utf-8")
         self.assertIn('snapshot.get_integer("rtk.baudrate")', source)
         self.assertIn('snapshot.get_integer("ntrip.port")', source)
 
+    # 测试作用：验证“rtk_validity_is_dependency_free_and_tested”场景的契约、输出结果和边界行为。
     def test_rtk_validity_is_dependency_free_and_tested(self):
         required = (
             "include/cleanbot_rtk/rtk_validity.hpp",
@@ -42,6 +46,7 @@ class RtkPackageContractTest(unittest.TestCase):
         missing = [item for item in required if not (PACKAGE / item).is_file()]
         self.assertEqual(missing, [])
 
+    # 测试作用：验证“rtcm3_is_validated_and_forwarded_as_complete_frames”场景的契约、输出结果和边界行为。
     def test_rtcm3_is_validated_and_forwarded_as_complete_frames(self):
         required = (
             "include/cleanbot_rtk/rtcm3_frame_buffer.hpp",
@@ -55,6 +60,7 @@ class RtkPackageContractTest(unittest.TestCase):
         for token in ("Rtcm3FrameBuffer", "onRtcmBytes", "rtcm_frame_buffer_.pop"):
             self.assertIn(token, node)
 
+    # 测试作用：验证“rtk_fix_distinguishes_antenna_and_vehicle_center”场景的契约、输出结果和边界行为。
     def test_rtk_fix_distinguishes_antenna_and_vehicle_center(self):
         message = (
             WORKSPACE / "src" / "cleanbot_interfaces" / "msg" / "RtkFix.msg"
@@ -73,6 +79,7 @@ class RtkPackageContractTest(unittest.TestCase):
         for field in required:
             self.assertIn(field, message)
 
+    # 测试作用：验证“rtk_serial_is_the_only_serial_owner”场景的契约、输出结果和边界行为。
     def test_rtk_serial_is_the_only_serial_owner(self):
         required = (
             "include/cleanbot_rtk/rtk_serial.hpp",
@@ -102,6 +109,7 @@ class RtkPackageContractTest(unittest.TestCase):
                 owners.append(str(path.relative_to(PACKAGE)))
         self.assertEqual(owners, ["include\\cleanbot_rtk\\rtk_serial.hpp"])
 
+    # 测试作用：验证“ntrip_client_is_async_and_does_not_own_serial”场景的契约、输出结果和边界行为。
     def test_ntrip_client_is_async_and_does_not_own_serial(self):
         header_path = PACKAGE / "include/cleanbot_rtk/ntrip_client.hpp"
         source_path = PACKAGE / "src/ntrip_client.cpp"
@@ -120,6 +128,7 @@ class RtkPackageContractTest(unittest.TestCase):
         self.assertNotIn("serial_port", header.lower())
         self.assertNotIn("serial_port", source.lower())
 
+    # 测试作用：验证“rtk_node_publishes_antenna_and_vehicle_center_without_motion_control”场景的契约、输出结果和边界行为。
     def test_rtk_node_publishes_antenna_and_vehicle_center_without_motion_control(self):
         source_path = PACKAGE / "src/rtk_node.cpp"
         self.assertTrue(source_path.is_file())
@@ -148,6 +157,7 @@ class RtkPackageContractTest(unittest.TestCase):
         self.assertNotIn("sendBraking", source)
         self.assertNotIn("redis", source.lower())
 
+    # 测试作用：验证“rtk_node_reports_stream_freshness_when_serial_becomes_silent”场景的契约、输出结果和边界行为。
     def test_rtk_node_reports_stream_freshness_when_serial_becomes_silent(self):
         source = (PACKAGE / "src/rtk_node.cpp").read_text(encoding="utf-8")
 
@@ -165,6 +175,7 @@ class RtkPackageContractTest(unittest.TestCase):
         self.assertNotIn("utcSecondsNow", source)
         self.assertIn("synchronizer_->observe_gga(gga.data, received_at)", source)
 
+    # 测试作用：验证“receiver_persistence_is_explicit_and_disabled_by_default”场景的契约、输出结果和边界行为。
     def test_receiver_persistence_is_explicit_and_disabled_by_default(self):
         node = (PACKAGE / "src/rtk_node.cpp").read_text(encoding="utf-8")
         registry = (WORKSPACE / "src/cleanbot_config/src/config_registry.cpp").read_text(

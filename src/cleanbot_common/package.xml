@@ -1,16 +1,25 @@
 <?xml version="1.0"?>
+<!-- 文件作用：声明cleanbot_common公共通信基础包的元数据和依赖。 -->
 <package format="3">
+  <!-- ROS2包名称。 -->
   <name>cleanbot_common</name>
+  <!-- 包版本号。 -->
   <version>0.1.0</version>
+  <!-- 包含共享QoS配置和发布者会话代际工具。 -->
   <description>Shared C++ communication contracts and QoS profiles for cleanbot nodes.</description>
+  <!-- 包维护者和联系邮箱。 -->
   <maintainer email="engineering@cleanbot.local">Cleanbot Engineering</maintainer>
+  <!-- 当前包的许可证。 -->
   <license>Proprietary</license>
 
+  <!-- 构建工具和运行时ROS2依赖。 -->
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>rclcpp</depend>
+  <!-- 仅测试构建使用GoogleTest。 -->
   <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
+    <!-- 使用ament_cmake构建本包。 -->
     <build_type>ament_cmake</build_type>
   </export>
 </package>

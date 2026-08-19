@@ -1,3 +1,4 @@
+# 文件作用：验证 config registry runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -33,15 +34,18 @@ if RUNTIME_AVAILABLE:
 
 
 class ConfigRegistryRuntimeTest(unittest.TestCase):
+    # 测试初始化：为每个用例创建相互隔离的初始状态和输入。
     def setUp(self):
         self.registry = (
             cppyy.gbl.cleanbot.config.ConfigRegistry() if RUNTIME_AVAILABLE else None
         )
 
+    # 测试作用：验证“registry_source_exists”场景的契约、输出结果和边界行为。
     def test_registry_source_exists(self):
         self.assertTrue(REGISTRY_HEADER.is_file())
         self.assertTrue(REGISTRY_SOURCE.is_file())
 
+    # 测试作用：验证“base_forward_speed_has_approved_default_range_and_apply_policy”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "configuration registry implementation is not present")
     def test_base_forward_speed_has_approved_default_range_and_apply_policy(self):
         definition = self.registry.find("motion.base_forward_speed")
@@ -57,6 +61,7 @@ class ConfigRegistryRuntimeTest(unittest.TestCase):
         self.assertTrue(self.registry.validate_value("motion.base_forward_speed", "600").valid)
         self.assertFalse(self.registry.validate_value("motion.base_forward_speed", "601").valid)
 
+    # 测试作用：验证“http_gateway_preserves_old_service_listener_defaults”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "configuration registry implementation is not present")
     def test_http_gateway_preserves_old_service_listener_defaults(self):
         defaults = self.registry.default_values()
@@ -69,6 +74,7 @@ class ConfigRegistryRuntimeTest(unittest.TestCase):
         self.assertFalse(self.registry.validate_value("http.port", "0").valid)
         self.assertFalse(self.registry.validate_value("http.port", "65536").valid)
 
+    # 测试作用：验证“required_hardware_and_rtk_values_do_not_receive_fake_defaults”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "configuration registry implementation is not present")
     def test_required_hardware_and_rtk_values_do_not_receive_fake_defaults(self):
         defaults = self.registry.default_values()
@@ -84,6 +90,7 @@ class ConfigRegistryRuntimeTest(unittest.TestCase):
         self.assertIn("rtk.center_offset_along_heading_m", missing)
         self.assertIn("rtk.center_offset_right_m", missing)
 
+    # 测试作用：验证“ntrip_credentials_are_required_only_when_ntrip_is_enabled”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "configuration registry implementation is not present")
     def test_ntrip_credentials_are_required_only_when_ntrip_is_enabled(self):
         values = self.registry.default_values()
@@ -112,6 +119,7 @@ class ConfigRegistryRuntimeTest(unittest.TestCase):
         ):
             self.assertIn(key, missing)
 
+    # 测试作用：验证“unknown_key_and_invalid_value_are_rejected”场景的契约、输出结果和边界行为。
     @unittest.skipUnless(RUNTIME_AVAILABLE, "configuration registry implementation is not present")
     def test_unknown_key_and_invalid_value_are_rejected(self):
         unknown = self.registry.validate_value("unknown.key", "1")

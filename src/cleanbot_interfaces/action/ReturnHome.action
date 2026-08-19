@@ -1,3 +1,4 @@
+# 文件作用：定义车辆返回指定坐标并可选入库的动作接口。
 float64 target_lat
 float64 target_lon
 bool dock_after_arrival

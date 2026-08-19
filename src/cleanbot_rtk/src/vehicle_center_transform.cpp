@@ -1,3 +1,7 @@
+/*
+ * 文件作用：车辆中心变换实现：把天线测量点转换到车辆参考中心。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_rtk/vehicle_center_transform.hpp"
 
 #include <cmath>
@@ -10,6 +14,7 @@ constexpr double kEarthRadiusM = 6371000.0;
 constexpr double kPi = 3.14159265358979323846;
 }  // namespace
 
+// 根据天线坐标、航向和安装偏移计算车辆几何中心。
 CenterPoint VehicleCenterTransform::compute(
     const double raw_lat,
     const double raw_lon,
@@ -39,6 +44,7 @@ CenterPoint VehicleCenterTransform::compute(
       right_m);
 }
 
+// 在球面上从起点沿方位角和距离推导目标坐标。
 CenterPoint VehicleCenterTransform::destination(
     const double lat,
     const double lon,
@@ -63,6 +69,7 @@ CenterPoint VehicleCenterTransform::destination(
   return point;
 }
 
+// 将坐标值按接口精度保留至小数点后八位。
 double VehicleCenterTransform::round8(const double value) {
   return std::round(value * 100000000.0) / 100000000.0;
 }

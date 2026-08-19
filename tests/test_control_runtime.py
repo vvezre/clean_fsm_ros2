@@ -1,3 +1,4 @@
+# 文件作用：验证 control runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import math
 import os
@@ -39,6 +40,7 @@ cppyy.cppdef(
 
 
 class TrackingCoreRuntimeTest(unittest.TestCase):
+    # 测试作用：验证“heading_wrap_and_finish_rules”场景的契约、输出结果和边界行为。
     def test_heading_wrap_and_finish_rules(self):
         normalize = cppyy.gbl.cleanbot.control.normalize_heading_delta
         finish = cppyy.gbl.cleanbot.control.should_finish_point_to_point
@@ -49,6 +51,7 @@ class TrackingCoreRuntimeTest(unittest.TestCase):
         self.assertTrue(finish(1.0, -0.01, 0.20, 0.03, 0.30))
         self.assertFalse(finish(1.0, -0.01, 0.40, 0.03, 0.30))
 
+    # 测试作用：验证“kalman_initializes_then_smooths_measurements”场景的契约、输出结果和边界行为。
     def test_kalman_initializes_then_smooths_measurements(self):
         params = cppyy.gbl.cleanbot.control.TrackingParameters()
         params.process_noise = 0.2
@@ -63,6 +66,7 @@ class TrackingCoreRuntimeTest(unittest.TestCase):
         self.assertGreater(second.lon, 118.0)
         self.assertLess(second.lon, 118.000010)
 
+    # 测试作用：验证“controller_calculates_cte_and_limits_output”场景的契约、输出结果和边界行为。
     def test_controller_calculates_cte_and_limits_output(self):
         params = cppyy.gbl.cleanbot.control.TrackingParameters()
         params.heading_gain = 10.0
@@ -84,6 +88,7 @@ class TrackingCoreRuntimeTest(unittest.TestCase):
 
 
 class CommandArbiterRuntimeTest(unittest.TestCase):
+    # 辅助方法：为 command 测试场景准备输入、执行操作或整理结果。
     def command(
         self, source, command_id, speed, operator_intent=False, brake=False, stamp_ms=0
     ):
@@ -98,6 +103,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         command.brake = brake
         return command
 
+    # 辅助方法：为 publisher_identity 测试场景准备输入、执行操作或整理结果。
     def publisher_identity(self, implementation_identifier, gid):
         identity = cppyy.gbl.cleanbot.common.PublisherIdentity()
         identity.implementation_identifier = implementation_identifier
@@ -105,6 +111,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
             identity.gid.push_back(value)
         return identity
 
+    # 测试作用：验证“manual_replaces_mission_then_expires_to_brake”场景的契约、输出结果和边界行为。
     def test_manual_replaces_mission_then_expires_to_brake(self):
         params = cppyy.gbl.cleanbot.control.ArbiterParameters()
         params.manual_lease_ms = 800
@@ -119,6 +126,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertEqual(expired.source, "idle_brake")
         self.assertTrue(expired.brake)
 
+    # 测试作用：验证“old_mission_heartbeat_cannot_return_after_manual_mode_switch”场景的契约、输出结果和边界行为。
     def test_old_mission_heartbeat_cannot_return_after_manual_mode_switch(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -145,6 +153,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(arbiter.output(1000).source, "new-mission")
 
+    # 测试作用：验证“emergency_requires_newer_operator_command_and_clears_brush”场景的契约、输出结果和边界行为。
     def test_emergency_requires_newer_operator_command_and_clears_brush(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -168,6 +177,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertEqual(resumed.source, "fresh")
         self.assertEqual(resumed.brush_speed, 0)
 
+    # 测试作用：验证“brush_is_merged_without_starting_vehicle_motion”场景的契约、输出结果和边界行为。
     def test_brush_is_merged_without_starting_vehicle_motion(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         arbiter.set_brush(True, 70, True)
@@ -178,6 +188,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertEqual(output.x_speed, 0)
         self.assertEqual(output.brush_speed, 70)
 
+    # 测试作用：验证“timestamp_orders_operations_from_different_publishers”场景的契约、输出结果和边界行为。
     def test_timestamp_orders_operations_from_different_publishers(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -202,6 +213,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertFalse(arbiter.software_stopped())
         self.assertEqual(arbiter.output(1200).source, "fresh-task")
 
+    # 断言辅助方法：集中检查 assert_maintenance_output 对应结果是否满足测试约束。
     def assert_maintenance_output(self, output, generation):
         self.assertEqual(output.request_id, generation)
         self.assertEqual(output.source, "maintenance_gate")
@@ -219,6 +231,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(output.brake)
         self.assertFalse(output.charge)
 
+    # 测试作用：验证“maintenance_clears_existing_and_rejects_new_motion_and_brush”场景的契约、输出结果和边界行为。
     def test_maintenance_clears_existing_and_rejects_new_motion_and_brush(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -248,6 +261,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(released.brake)
         self.assertEqual(released.brush_speed, 0)
 
+    # 测试作用：验证“emergency_during_maintenance_remains_latched_after_release”场景的契约、输出结果和边界行为。
     def test_emergency_during_maintenance_remains_latched_after_release(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -261,6 +275,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(arbiter.set_maintenance(False, 22))
         self.assertEqual(arbiter.output(3).source, "software_emergency_stop")
 
+    # 测试作用：验证“maintenance_generation_is_correlated_and_monotonic”场景的契约、输出结果和边界行为。
     def test_maintenance_generation_is_correlated_and_monotonic(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         self.assertFalse(arbiter.set_maintenance(True, 0))
@@ -282,6 +297,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(max_arbiter.set_maintenance(False, maximum))
         self.assertFalse(max_arbiter.set_maintenance(True, maximum))
 
+    # 测试作用：验证“active_generation_switch_stays_clamped_and_resets_operator_mode”场景的契约、输出结果和边界行为。
     def test_active_generation_switch_stays_clamped_and_resets_operator_mode(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -336,6 +352,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertEqual(resumed.x_speed, 175)
         self.assertEqual(resumed.brush_speed, 0)
 
+    # 测试作用：验证“existing_software_stop_survives_maintenance”场景的契约、输出结果和边界行为。
     def test_existing_software_stop_survives_maintenance(self):
         arbiter = cppyy.gbl.cleanbot.control.CommandArbiterCore()
         source = cppyy.gbl.cleanbot.control.CommandSource
@@ -349,6 +366,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(arbiter.software_stopped())
         self.assertEqual(arbiter.output(3).source, "software_emergency_stop")
 
+    # 测试作用：验证“maintenance_cache_rejects_mismatched_release_without_mutation”场景的契约、输出结果和边界行为。
     def test_maintenance_cache_rejects_mismatched_release_without_mutation(self):
         cache = cppyy.gbl.cleanbot.control.MaintenanceGateCache()
         self.assertTrue(cache.update(True, 10))
@@ -362,6 +380,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertFalse(cache.active())
         self.assertEqual(cache.generation(), 10)
 
+    # 测试作用：验证“maintenance_cache_rejects_zero_old_and_released_generations”场景的契约、输出结果和边界行为。
     def test_maintenance_cache_rejects_zero_old_and_released_generations(self):
         cache = cppyy.gbl.cleanbot.control.MaintenanceGateCache()
         self.assertFalse(cache.update(True, 0))
@@ -383,6 +402,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(cache.active())
         self.assertEqual(cache.generation(), 6)
 
+    # 测试作用：验证“publisher_restart_forces_one_reissue_and_retires_old_session”场景的契约、输出结果和边界行为。
     def test_publisher_restart_forces_one_reissue_and_retires_old_session(self):
         coordinator = (
             cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
@@ -417,6 +437,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertTrue(retired_a.gate_active)
         self.assertEqual(retired_a.generation, 10)
 
+    # 测试作用：验证“invalid_unknown_state_does_not_poison_current_publisher”场景的契约、输出结果和边界行为。
     def test_invalid_unknown_state_does_not_poison_current_publisher(self):
         coordinator = (
             cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
@@ -446,6 +467,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertEqual(higher_active.generation, 11)
         self.assertFalse(coordinator.observe(True, 12, publisher_b).accepted)
 
+    # 测试作用：验证“new_publisher_can_commit_exact_release_without_reissue”场景的契约、输出结果和边界行为。
     def test_new_publisher_can_commit_exact_release_without_reissue(self):
         coordinator = (
             cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
@@ -466,6 +488,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertFalse(repeated_release.session_changed)
         self.assertFalse(repeated_release.force_republish)
 
+    # 测试作用：验证“untrackable_identity_cannot_release_or_poison_tracked_state”场景的契约、输出结果和边界行为。
     def test_untrackable_identity_cannot_release_or_poison_tracked_state(self):
         coordinator = (
             cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator()
@@ -513,6 +536,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
         self.assertFalse(inactive_coordinator.observe(False, 1, invalid).accepted)
         self.assertFalse(inactive_coordinator.has_state())
 
+    # 测试作用：验证“tracker_capacity_exhaustion_is_atomic_and_fails_closed”场景的契约、输出结果和边界行为。
     def test_tracker_capacity_exhaustion_is_atomic_and_fails_closed(self):
         coordinator = (
             cppyy.gbl.cleanbot.control.MaintenancePublisherCoordinator(0)
@@ -535,6 +559,7 @@ class CommandArbiterRuntimeTest(unittest.TestCase):
 
 
 class JoystickMapperRuntimeTest(unittest.TestCase):
+    # 测试作用：验证“full_scale_axes_and_dead_zone”场景的契约、输出结果和边界行为。
     def test_full_scale_axes_and_dead_zone(self):
         mapper = cppyy.gbl.cleanbot.control.JoystickMapper()
         self.assertEqual(mapper.map(0.0, 1.0).x_speed, 350)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed release verification primitives for the cleanbot updater."""
+# 文件作用：以故障关闭策略完成版本发现、下载、验签、安装、切换、回滚和中断恢复。
 
 from __future__ import annotations
 
@@ -54,27 +54,33 @@ _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class UpdaterError(RuntimeError):
-    """Base updater failure."""
+    # 升级器所有可预期业务失败的基础异常。
+    pass
 
 
 class ManifestError(UpdaterError):
-    """Manifest bytes or fields are invalid."""
+    # 发布清单字节或字段不符合约束时抛出的异常。
+    pass
 
 
 class ReleaseError(UpdaterError):
-    """GitHub release metadata is invalid."""
+    # 远端发布元数据不合法或不完整时抛出的异常。
+    pass
 
 
 class VerificationError(UpdaterError):
-    """A signed asset or extracted archive failed verification."""
+    # 签名资产或解压内容校验失败时抛出的异常。
+    pass
 
 
 class ConfigError(UpdaterError):
-    """Updater configuration is invalid."""
+    # 升级器配置字段不合法时抛出的异常。
+    pass
 
 
 class StateError(UpdaterError):
-    """Updater state is invalid or cannot be committed."""
+    # 升级状态无效或无法持久化时抛出的异常。
+    pass
 
 
 class ArchiveSpec(NamedTuple):
@@ -185,6 +191,7 @@ _ROS_CLI_PREFIX = (
 )
 
 
+# 方法作用：将对象编码为字段排序、格式固定并以换行结尾的规范 JSON 字节。
 def canonical_json_bytes(value: Any) -> bytes:
     try:
         encoded = json.dumps(
@@ -199,6 +206,7 @@ def canonical_json_bytes(value: Any) -> bytes:
     return encoded.encode("utf-8") + b"\n"
 
 
+# 方法作用：构造 JSON 对象时拒绝重复字段，防止歧义配置绕过校验。
 def _unique_object(pairs):
     result = {}
     for key, value in pairs:
@@ -208,6 +216,7 @@ def _unique_object(pairs):
     return result
 
 
+# 方法作用：检查对象字段集合与预期完全一致，拒绝缺失项和未知项。
 def _exact_fields(value: Any, fields, context: str) -> Dict[str, Any]:
     if not isinstance(value, dict):
         raise ManifestError(f"{context} must be an object")
@@ -222,6 +231,7 @@ def _exact_fields(value: Any, fields, context: str) -> Dict[str, Any]:
     return value
 
 
+# 方法作用：校验整数类型及上下界，并返回通过检查的数值。
 def _bounded_integer(
     value: Any,
     *,
@@ -234,6 +244,7 @@ def _bounded_integer(
     return value
 
 
+# 方法作用：严格解析发布清单，校验版本、目标平台、归档名称、大小和摘要。
 def parse_manifest(
     data: bytes,
     expected_architecture: str,
@@ -329,6 +340,7 @@ def parse_manifest(
     )
 
 
+# 方法作用：按大小上限和严格 JSON 规则解析顶层对象。
 def _strict_json_object(data: bytes, context: str, maximum_bytes: int):
     if not isinstance(data, bytes) or not data or len(data) > maximum_bytes:
         raise ConfigError(f"{context} byte length is invalid")
@@ -347,6 +359,7 @@ def _strict_json_object(data: bytes, context: str, maximum_bytes: int):
     return value
 
 
+# 方法作用：校验配置路径是规范的绝对 POSIX 路径。
 def _absolute_posix_path(value: Any, context: str) -> str:
     if not isinstance(value, str) or not value.startswith("/") or "\\" in value:
         raise ConfigError(f"{context} must be an absolute POSIX path")
@@ -356,6 +369,7 @@ def _absolute_posix_path(value: Any, context: str) -> str:
     return path.as_posix()
 
 
+# 方法作用：解析并校验升级器配置，生成不可歧义的运行参数对象。
 def parse_config(data: bytes) -> UpdaterConfig:
     value = _strict_json_object(data, "updater config", MAX_MANIFEST_BYTES)
     if set(value) != set(_CONFIG_FIELDS):
@@ -396,6 +410,7 @@ def parse_config(data: bytes) -> UpdaterConfig:
     )
 
 
+# 方法作用：从远端发布元数据中选择唯一且完整的归档、清单和签名资产。
 def select_release_assets(payload: Any) -> Dict[str, ReleaseAsset]:
     if not isinstance(payload, dict):
         raise ReleaseError("release response must be an object")
@@ -440,6 +455,7 @@ def select_release_assets(payload: Any) -> Dict[str, ReleaseAsset]:
     return selected
 
 
+# 方法作用：校验 GitHub 仓库标识格式，避免构造不受信任的请求地址。
 def _validate_repository(repository: Any) -> str:
     if (
         not isinstance(repository, str)
@@ -449,6 +465,7 @@ def _validate_repository(repository: Any) -> str:
     return repository
 
 
+# 方法作用：按响应大小上限读取网络数据，超限时立即拒绝。
 def _read_bounded_response(response, maximum_bytes: int, context: str) -> bytes:
     try:
         data = response.read(maximum_bytes + 1)
@@ -459,6 +476,7 @@ def _read_bounded_response(response, maximum_bytes: int, context: str) -> bytes:
     return data
 
 
+# 方法作用：请求并严格校验 GitHub 最新稳定版本元数据。
 def fetch_latest_release(
     repository: str,
     *,
@@ -500,6 +518,7 @@ def fetch_latest_release(
     return LatestRelease(payload["tag_name"], assets)
 
 
+# 方法作用：校验单个发布资产的名称、大小和下载地址元数据。
 def _validate_release_asset(asset: Any) -> ReleaseAsset:
     if not isinstance(asset, ReleaseAsset):
         raise ReleaseError("release asset is invalid")
@@ -517,6 +536,7 @@ def _validate_release_asset(asset: Any) -> ReleaseAsset:
     return asset
 
 
+# 方法作用：以大小限制和原子替换方式下载资产，失败时清理不完整文件。
 def download_release_asset(
     asset: ReleaseAsset,
     destination: Path,
@@ -603,6 +623,7 @@ def download_release_asset(
     return destination
 
 
+# 方法作用：确认路径指向非符号链接的普通文件，并返回文件状态。
 def _regular_file(path: Path, context: str) -> os.stat_result:
     try:
         information = path.lstat()
@@ -613,6 +634,7 @@ def _regular_file(path: Path, context: str) -> os.stat_result:
     return information
 
 
+# 方法作用：检查目标文件系统剩余空间是否满足内容大小和安全预留要求。
 def ensure_free_space(path: Path, required_bytes: int, context: str) -> None:
     if type(required_bytes) is not int or required_bytes < 0:
         raise VerificationError(f"{context} required space is invalid")
@@ -630,6 +652,7 @@ def ensure_free_space(path: Path, required_bytes: int, context: str) -> None:
         )
 
 
+# 方法作用：分块计算普通文件的 SHA-256 摘要。
 def sha256_file(path: Path) -> str:
     _regular_file(path, "archive")
     digest = hashlib.sha256()
@@ -645,6 +668,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# 方法作用：核对归档文件大小和 SHA-256 是否与已验证清单一致。
 def verify_archive(path: Path, expected: ArchiveSpec) -> None:
     information = _regular_file(path, "archive")
     if information.st_size != expected.size:
@@ -653,6 +677,7 @@ def verify_archive(path: Path, expected: ArchiveSpec) -> None:
         raise VerificationError("archive sha256 does not match the signed manifest")
 
 
+# 方法作用：调用 OpenSSL 使用受信公钥验证发布清单的 Ed25519 签名。
 def verify_manifest_signature(
     manifest_path: Path,
     signature_path: Path,
@@ -698,6 +723,7 @@ def verify_manifest_signature(
         )
 
 
+# 方法作用：校验归档成员路径，拒绝绝对路径、回退路径和非规范名称。
 def _safe_member_name(name: str) -> str:
     if not name or "\x00" in name or "\\" in name:
         raise VerificationError("archive member path is invalid")
@@ -712,6 +738,7 @@ def _safe_member_name(name: str) -> str:
     return normalized
 
 
+# 方法作用：在条目数和解压大小限制下安全提取归档，拒绝链接及特殊文件。
 def secure_extract(
     archive_path: Path,
     destination: Path,
@@ -803,6 +830,7 @@ def secure_extract(
         raise
 
 
+# 方法作用：验证清单、签名和归档后，将新版本安全解压到独立暂存目录。
 def stage_release(
     *,
     manifest_path: Path,
@@ -871,6 +899,7 @@ def stage_release(
     return StagedRelease(parsed.release, final_path, parsed)
 
 
+# 方法作用：读取并重新校验已暂存版本，防止应用前内容被替换或篡改。
 def load_staged_release(
     staged_path: Path,
     expected_release: str,
@@ -941,6 +970,7 @@ def load_staged_release(
     return StagedRelease(expected_release, staged_path, parsed)
 
 
+# 方法作用：把升级状态对象转换为可规范持久化的 JSON 字段集合。
 def update_state_object(state: UpdateState) -> Dict[str, Any]:
     return {
         "schemaVersion": 1,
@@ -952,6 +982,7 @@ def update_state_object(state: UpdateState) -> Dict[str, Any]:
     }
 
 
+# 方法作用：校验状态中的版本号为空或满足安全版本标识格式。
 def _validate_release_or_empty(value: Any, context: str) -> str:
     if value == "":
         return ""
@@ -960,6 +991,7 @@ def _validate_release_or_empty(value: Any, context: str) -> str:
     return value
 
 
+# 方法作用：严格解析升级状态字段，并重建内部状态对象。
 def _parse_update_state_value(value: Any) -> UpdateState:
     if not isinstance(value, dict) or set(value) != set(_STATE_FIELDS):
         raise StateError("updater state fields do not match the schema")
@@ -986,6 +1018,7 @@ def _parse_update_state_value(value: Any) -> UpdateState:
     )
 
 
+# 方法作用：从有界普通文件读取升级状态；文件不存在时返回初始状态。
 def load_update_state(path: Path) -> UpdateState:
     information = _regular_file(path, "updater state")
     if information.st_size <= 0 or information.st_size > MAX_MANIFEST_BYTES:
@@ -1008,6 +1041,7 @@ def load_update_state(path: Path) -> UpdateState:
     return _parse_update_state_value(value)
 
 
+# 方法作用：通过临时文件、同步和原子替换安全提交升级状态。
 def write_update_state(path: Path, state: UpdateState) -> None:
     value = update_state_object(state)
     _parse_update_state_value(value)
@@ -1051,6 +1085,7 @@ def write_update_state(path: Path, state: UpdateState) -> None:
                 pass
 
 
+# 方法作用：确认目录位于指定可信根目录内且不是符号链接逃逸路径。
 def _contained_directory(path: Path, root: Path, context: str) -> Path:
     try:
         resolved_root = root.resolve(strict=True)
@@ -1063,6 +1098,7 @@ def _contained_directory(path: Path, root: Path, context: str) -> Path:
     return resolved
 
 
+# 方法作用：原子切换 current 符号链接到目标版本，并保留可回滚的上一版本。
 def switch_current_release(
     current_link: Path,
     target_release: Path,
@@ -1105,6 +1141,7 @@ def switch_current_release(
     return previous
 
 
+# 方法作用：从 ROS2 服务文本输出中提取指定布尔字段。
 def _output_boolean(output: str, name: str) -> Optional[bool]:
     match = re.search(
         rf"\b{re.escape(name)}\s*[:=]\s*(true|false)",
@@ -1116,6 +1153,7 @@ def _output_boolean(output: str, name: str) -> Optional[bool]:
     return match.group(1).lower() == "true"
 
 
+# 方法作用：从 ROS2 服务输出中提取维护模式代次编号。
 def _output_generation(output: str) -> Optional[int]:
     matches = re.findall(r"\bgeneration\s*[:=]\s*(\d+)", output)
     if not matches:
@@ -1123,6 +1161,7 @@ def _output_generation(output: str) -> Optional[int]:
     return int(matches[-1])
 
 
+# 方法作用：解析维护服务返回的接受状态、就绪状态和代次。
 def parse_maintenance_service_output(output: str) -> MaintenanceServiceResult:
     if not isinstance(output, str) or len(output) > 64 * 1024:
         raise VerificationError("maintenance service output is invalid")
@@ -1145,6 +1184,7 @@ def parse_maintenance_service_output(output: str) -> MaintenanceServiceResult:
     )
 
 
+# 方法作用：确认维护状态输出属于目标代次且已满足安全维护条件。
 def parse_maintenance_ready(output: str, *, generation: int) -> bool:
     if (
         not isinstance(output, str)
@@ -1159,6 +1199,7 @@ def parse_maintenance_ready(output: str, *, generation: int) -> bool:
     )
 
 
+# 方法作用：在超时限制下执行外部命令，并把失败统一转换为升级器异常。
 def _run_checked_command(
     argv,
     *,
@@ -1190,10 +1231,12 @@ def _run_checked_command(
     return stdout
 
 
+# 方法作用：构造通过隔离包装脚本执行 ROS2 CLI 的完整命令列表。
 def _ros_cli_command(*arguments: str):
     return [*_ROS_CLI_PREFIX, *arguments]
 
 
+# 方法作用：调用维护模式服务，申请或释放具有代次约束的维护门。
 def call_maintenance_service(
     *,
     enable: bool,
@@ -1249,6 +1292,7 @@ def call_maintenance_service(
     return result
 
 
+# 方法作用：读取维护状态主题并判断指定代次是否已经安全就绪。
 def read_maintenance_ready(
     *,
     generation: int,
@@ -1272,6 +1316,7 @@ def read_maintenance_ready(
     return parse_maintenance_ready(output, generation=generation)
 
 
+# 方法作用：递归验证安装树只包含真实目录和普通文件，拒绝链接及特殊节点。
 def _validate_regular_tree(root: Path, context: str) -> None:
     if not root.is_dir() or root.is_symlink():
         raise VerificationError(f"{context} must be a real directory")
@@ -1290,6 +1335,7 @@ def _validate_regular_tree(root: Path, context: str) -> None:
                 raise VerificationError(f"{context} contains an unsafe file")
 
 
+# 方法作用：同步安装树中的普通文件和目录，确保切换前内容已落盘。
 def _fsync_regular_tree(root: Path) -> None:
     if os.name == "nt":
         return
@@ -1314,6 +1360,7 @@ def _fsync_regular_tree(root: Path) -> None:
             os.close(descriptor)
 
 
+# 方法作用：把已验证暂存内容复制到最终版本目录并执行完整落盘校验。
 def install_staged_payload(
     staged_path: Path,
     release: str,
@@ -1375,6 +1422,7 @@ def install_staged_payload(
     return final_path
 
 
+# 方法作用：升级成功后删除过期暂存内容，并按保留策略清理旧版本。
 def cleanup_successful_update(
     staged_path: Path,
     staging_root: Path,
@@ -1433,6 +1481,7 @@ def cleanup_successful_update(
         return
 
 
+# 方法作用：通过 systemctl 启动、停止或重启 Cleanbot 服务并检查命令结果。
 def control_systemd_service(
     action: str,
     service_name: str,
@@ -1455,6 +1504,7 @@ def control_systemd_service(
     )
 
 
+# 方法作用：在限定时间内查询服务状态和 ROS2 健康信号，判断新版本是否可用。
 def check_cleanbot_health(
     service_name: str,
     *,
@@ -1489,6 +1539,7 @@ def check_cleanbot_health(
     )
 
 
+# 方法作用：按截止时间重复调用布尔检查函数，成功或超时后返回结果。
 def _retry_boolean(
     operation: Callable[[], bool],
     *,
@@ -1506,6 +1557,7 @@ def _retry_boolean(
     return False
 
 
+# 方法作用：进入维护模式后安装、切换并健康检查新版本，失败时执行安全回滚。
 def apply_staged_release(
     config: UpdaterConfig,
     state: UpdateState,
@@ -1868,6 +1920,7 @@ def apply_staged_release(
         raise UpdaterError(combined_failure) from exception
 
 
+# 方法作用：发现最新稳定版本，下载三个受信资产并完成验签暂存。
 def stage_latest_release(
     config: UpdaterConfig,
     state: UpdateState,
@@ -1990,6 +2043,7 @@ def stage_latest_release(
         shutil.rmtree(download_root, ignore_errors=True)
 
 
+# 方法作用：进入维护模式后切回上一版本，并验证回滚后的服务健康状态。
 def rollback_to_previous_release(
     config: UpdaterConfig,
     state: UpdateState,
@@ -2304,6 +2358,7 @@ def rollback_to_previous_release(
         raise UpdaterError(failure) from exception
 
 
+# 方法作用：根据持久状态恢复被中断的安装、切换、验证或回滚事务。
 def recover_interrupted_transition(
     config: UpdaterConfig,
     state: UpdateState,
@@ -2556,6 +2611,7 @@ def recover_interrupted_transition(
         raise UpdaterError(failure) from exception
 
 
+# 方法作用：清理或续接中断的下载和暂存状态，恢复到可重试阶段。
 def recover_interrupted_download(
     config: UpdaterConfig,
     state: UpdateState,
@@ -2617,6 +2673,7 @@ def recover_interrupted_download(
     return recovered
 
 
+# 方法作用：创建升级器状态、下载、应用、回滚和自动模式的命令行解析器。
 def build_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cleanbot-updater",
@@ -2633,6 +2690,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# 方法作用：把内部升级状态整理为适合命令行输出的精简状态对象。
 def status_object(state: UpdateState) -> Dict[str, str]:
     if not isinstance(state, UpdateState):
         raise StateError("updater state is invalid")
@@ -2645,6 +2703,7 @@ def status_object(state: UpdateState) -> Dict[str, str]:
     }
 
 
+# 方法作用：从指定普通文件读取并严格解析升级器配置。
 def load_updater_config(path: Path) -> UpdaterConfig:
     path = Path(path)
     information = _regular_file(path, "updater config")
@@ -2659,6 +2718,7 @@ def load_updater_config(path: Path) -> UpdaterConfig:
     return parse_config(data)
 
 
+# 方法作用：向命令行输出流写入规范 JSON，并立即刷新结果。
 def _write_cli_json(output, value: Any) -> None:
     output.write(
         json.dumps(
@@ -2672,6 +2732,7 @@ def _write_cli_json(output, value: Any) -> None:
     )
 
 
+# 程序入口逻辑：解析子命令，恢复中断事务并执行状态、下载、应用或回滚操作。
 def run_cli(
     argv=None,
     *,

@@ -1,3 +1,7 @@
+/*
+ * 文件作用：区域识别实现：从点云或边界数据识别可规划作业区域。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_modeling/region_recognizer.hpp"
 
 #include <algorithm>
@@ -23,15 +27,18 @@ struct BoundaryCandidate {
   double confidence{1.0};
 };
 
+// 提取模型点用于区域识别的局部平面坐标。
 Point2d recognition_xy(const ModelPoint& point) {
   return {point.x_cm, point.y_cm};
 }
 
+// 计算三点叉积，判断边界转向和点在线段哪一侧。
 double cross(const Point2d& a, const Point2d& b, const Point2d& c) {
   return (b.x_cm - a.x_cm) * (c.y_cm - a.y_cm) -
       (b.y_cm - a.y_cm) * (c.x_cm - a.x_cm);
 }
 
+// 使用鞋带公式计算多边形面积（平方厘米）。
 double polygon_area_cm2(const std::vector<Point2d>& polygon) {
   double twice_area = 0.0;
   for (std::size_t index = 0u; index < polygon.size(); ++index) {
@@ -42,6 +49,7 @@ double polygon_area_cm2(const std::vector<Point2d>& polygon) {
   return std::abs(twice_area) * 0.5;
 }
 
+// 按索引顺序从模型点集合提取多边形坐标。
 std::vector<Point2d> polygon_from_indexes(
     const ModelGroup& group,
     const std::vector<std::size_t>& indexes) {
@@ -53,6 +61,7 @@ std::vector<Point2d> polygon_from_indexes(
   return polygon;
 }
 
+// 计算连续三点处的有符号转角。
 double signed_turn_deg(
     const Point2d& previous,
     const Point2d& current,
@@ -67,6 +76,7 @@ double signed_turn_deg(
       180.0 / kPi;
 }
 
+// 计算点到有限线段的最短距离（厘米）。
 double point_to_segment_distance_cm(
     const Point2d& point,
     const Point2d& start,
@@ -90,6 +100,7 @@ double point_to_segment_distance_cm(
   return point_distance_cm(point, closest);
 }
 
+// 计算点到多边形全部边界的最短距离。
 double point_to_polygon_distance_cm(
     const Point2d& point,
     const std::vector<Point2d>& polygon) {
@@ -105,6 +116,7 @@ double point_to_polygon_distance_cm(
   return distance;
 }
 
+// 使用射线法判断点是否位于多边形内部或边界上。
 bool point_inside_polygon(
     const Point2d& point,
     const std::vector<Point2d>& polygon) {
@@ -127,6 +139,7 @@ bool point_inside_polygon(
   return inside;
 }
 
+// 计算点集凸包顶点数，用于评估区域几何质量。
 std::size_t convex_hull_vertex_count(const std::vector<Point2d>& points) {
   if (points.size() <= 2u) {
     return points.size();
@@ -134,6 +147,7 @@ std::size_t convex_hull_vertex_count(const std::vector<Point2d>& points) {
   std::vector<Point2d> sorted = points;
   std::sort(
       sorted.begin(), sorted.end(),
+      // 排序谓词作用：按当前几何或序号规则稳定比较两个候选元素。
       [](const Point2d& left, const Point2d& right) {
         if (left.x_cm != right.x_cm) {
           return left.x_cm < right.x_cm;
@@ -164,6 +178,7 @@ std::size_t convex_hull_vertex_count(const std::vector<Point2d>& points) {
   return hull.size();
 }
 
+// 按几何极角重新排列无序边界点，并评估重排可信度。
 bool reorder_boundary_by_geometry(
     const ModelGroup& group,
     BoundaryCandidate& candidate) {
@@ -177,6 +192,7 @@ bool reorder_boundary_by_geometry(
 
   std::sort(
       candidate.indexes.begin(), candidate.indexes.end(),
+      // 排序谓词作用：按当前几何或序号规则稳定比较两个候选元素。
       [&group, &centroid](const std::size_t left, const std::size_t right) {
         const auto& left_point = group.points[left];
         const auto& right_point = group.points[right];
@@ -202,6 +218,7 @@ bool reorder_boundary_by_geometry(
   return true;
 }
 
+// 检查模型点集合中是否存在距离低于容差的重复点。
 bool has_duplicate_points(
     const ModelGroup& group,
     const BoundaryCandidate& candidate,
@@ -220,6 +237,7 @@ bool has_duplicate_points(
   return false;
 }
 
+// 构造区域识别失败结果，同时保留原区域组供诊断。
 RecognitionResult recognition_error_result(
     const ModelGroup& group,
     const std::string& code,
@@ -238,6 +256,7 @@ RecognitionResult recognition_error_result(
   return result;
 }
 
+// 判断候选连接线是否穿过多边形内部或非端点边界。
 bool segment_crosses_polygon(
     const Point2d& start,
     const Point2d& end,
@@ -258,12 +277,14 @@ bool segment_crosses_polygon(
 
 using namespace region_recognizer_detail;
 
+// 识别区域边界、子区域和连接段，并计算是否需要人工确认。
 RecognitionResult recognize_group(
     const ModelGroup& input,
     const RecognitionOptions& options) {
   ModelGroup group = input;
   std::sort(
       group.points.begin(), group.points.end(),
+      // 排序谓词作用：按当前几何或序号规则稳定比较两个候选元素。
       [](const ModelPoint& left, const ModelPoint& right) {
         return left.sequence < right.sequence;
       });

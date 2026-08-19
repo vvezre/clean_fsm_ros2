@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- 文件作用：声明统一诊断 ROS 2 包的名称、依赖和导出信息。 -->
+<package format="3">
+  <name>cleanbot_diagnostics</name>
+  <version>0.1.0</version>
+  <description>Optional health diagnostics for cleanbot ROS2 nodes.</description>
+  <maintainer email="engineering@cleanbot.local">Cleanbot Engineering</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>diagnostic_updater</exec_depend>
+  <exec_depend>cleanbot_interfaces</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

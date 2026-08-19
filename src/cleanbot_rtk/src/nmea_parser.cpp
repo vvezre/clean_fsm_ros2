@@ -1,3 +1,7 @@
+/*
+ * 文件作用：NMEA解析实现：校验并提取定位语句中的时间、坐标和质量字段。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_rtk/nmea_parser.hpp"
 
 #include <cmath>
@@ -10,6 +14,7 @@ namespace rtk {
 
 namespace {
 
+// 将单个十六进制字符转换为数值，非法字符返回负一。
 int hexValue(const char value) {
   if (value >= '0' && value <= '9') {
     return value - '0';
@@ -23,6 +28,7 @@ int hexValue(const char value) {
   return -1;
 }
 
+// 校验 NMEA 起始符与异或校验和，并提取不含包装符的载荷。
 bool validateAndExtractPayload(
     const std::string& sentence, std::string& payload, std::string& error) {
   if (sentence.empty() || sentence[0] != '$') {
@@ -56,6 +62,7 @@ bool validateAndExtractPayload(
   return true;
 }
 
+// 按逗号切分 NMEA 字段，同时保留空字段的位置。
 std::vector<std::string> splitFields(const std::string& payload) {
   std::vector<std::string> fields;
   std::size_t start = 0u;
@@ -68,6 +75,7 @@ std::vector<std::string> splitFields(const std::string& payload) {
   return fields;
 }
 
+// 严格解析有限浮点数，拒绝空串和尾随字符。
 bool parseDouble(const std::string& text, double& value) {
   if (text.empty()) {
     return false;
@@ -77,6 +85,7 @@ bool parseDouble(const std::string& text, double& value) {
   return end != text.c_str() && *end == '\0' && std::isfinite(value);
 }
 
+// 解析可由 int 表示的非负整数文本。
 bool parseUnsigned(const std::string& text, int& value) {
   double parsed = 0.0;
   if (!parseDouble(text, parsed) || parsed < 0.0 || std::floor(parsed) != parsed) {
@@ -86,6 +95,7 @@ bool parseUnsigned(const std::string& text, int& value) {
   return true;
 }
 
+// 将 NMEA 的时分秒字段转换为当天累计秒数。
 bool parseUtc(const std::string& text, double& seconds) {
   double raw = 0.0;
   if (!parseDouble(text, raw)) {
@@ -102,6 +112,7 @@ bool parseUtc(const std::string& text, double& seconds) {
   return true;
 }
 
+// 将度分格式坐标和半球标志转换为带符号十进制度。
 bool parseCoordinate(
     const std::string& raw_text,
     const std::string& hemisphere,
@@ -130,6 +141,7 @@ bool parseCoordinate(
 
 }  // namespace
 
+// 校验校验和并解析 GGA 定位坐标、时间和固定解质量。
 GgaParseResult NmeaParser::parse_gga(const std::string& sentence) const {
   GgaParseResult result;
   std::string payload;
@@ -173,6 +185,7 @@ GgaParseResult NmeaParser::parse_gga(const std::string& sentence) const {
   return result;
 }
 
+// 校验并解析接收机航向句中的航向和可选俯仰角。
 HeadingParseResult NmeaParser::parse_heading(const std::string& sentence) const {
   HeadingParseResult result;
   std::string payload;

@@ -1,3 +1,4 @@
+# 文件作用：定义清扫、转场或返航任务的单个执行段消息。
 uint8 SEGMENT_UNKNOWN=0
 uint8 SEGMENT_CLEANING=1
 uint8 SEGMENT_TRANSFER=2

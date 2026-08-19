@@ -1,3 +1,4 @@
+# 文件作用：定义由清扫模型生成的可执行清扫计划消息。
 string id
 string model_id
 uint64 model_version

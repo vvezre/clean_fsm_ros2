@@ -1,3 +1,7 @@
+/*
+ * 文件作用：跟踪核心实现：根据目标线段和车辆状态计算跟踪控制量。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_control/tracking_core.hpp"
 
 #include <algorithm>
@@ -10,9 +14,12 @@ namespace {
 constexpr double kEarthRadiusM = 6371000.0;
 constexpr double kPi = 3.14159265358979323846;
 
+// 将角度转换为三角函数计算需要的弧度。
 double degreesToRadians(const double value) { return value * kPi / 180.0; }
+// 将弧度转换回对外使用的角度。
 double radiansToDegrees(const double value) { return value * 180.0 / kPi; }
 
+// 以起点为原点将经纬度近似投影到局部米坐标。
 void latLonToLocal(
     const double origin_lat,
     const double origin_lon,
@@ -25,6 +32,7 @@ void latLonToLocal(
   y = degreesToRadians(lat - origin_lat) * kEarthRadiusM;
 }
 
+// 将局部米坐标反投影为经纬度。
 void localToLatLon(
     const double origin_lat,
     const double origin_lon,
@@ -38,6 +46,7 @@ void localToLatLon(
 }
 }  // namespace
 
+// 返回目标航向相对当前航向的最短有符号角差。
 double normalize_heading_delta(
     const double target_heading, const double current_heading) {
   double delta = std::fmod(target_heading - current_heading + 180.0, 360.0);
@@ -47,6 +56,7 @@ double normalize_heading_delta(
   return delta - 180.0;
 }
 
+// 依据距离、投影剩余量和横向误差判定目标点是否完成。
 bool should_finish_point_to_point(
     const double distance_to_target,
     const double signed_remaining,
@@ -60,9 +70,11 @@ bool should_finish_point_to_point(
       signed_remaining <= 0.0 && std::abs(cte) <= cte_tolerance_m;
 }
 
+// 保存卡尔曼滤波过程噪声、观测噪声和时间步长限制。
 RtkKalmanFilter2D::RtkKalmanFilter2D(const TrackingParameters& parameters)
     : parameters_(parameters) {}
 
+// 清空状态向量、协方差和局部坐标原点。
 void RtkKalmanFilter2D::reset() {
   origin_lat_ = 0.0;
   origin_lon_ = 0.0;
@@ -76,6 +88,7 @@ void RtkKalmanFilter2D::reset() {
   initialized_ = false;
 }
 
+// 执行二维位置/速度卡尔曼预测和观测更新，输出滤波坐标。
 FilteredRtkPoint RtkKalmanFilter2D::update(
     const double lat, const double lon, const double timestamp) {
   FilteredRtkPoint result;
@@ -183,9 +196,11 @@ FilteredRtkPoint RtkKalmanFilter2D::update(
   return result;
 }
 
+// 保存直线 P 控制器的航向、横向误差增益和速度限幅。
 StraightLinePController::StraightLinePController(const TrackingParameters& parameters)
     : parameters_(parameters) {}
 
+// 计算相对目标线的横向误差、航向误差和限幅后的转向速度。
 TrackingCommand StraightLinePController::compute(
     const double start_lat,
     const double start_lon,
@@ -237,6 +252,7 @@ TrackingCommand StraightLinePController::compute(
   return result;
 }
 
+// 先滤波 RTK 坐标，再计算一次完整的直线跟踪指令。
 TrackingCommand build_tracking_command(
     RtkKalmanFilter2D& filter,
     const StraightLinePController& controller,

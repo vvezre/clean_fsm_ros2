@@ -1,3 +1,4 @@
+# 文件作用：从 Windows 开发机把 Cleanbot 发布包和配置安全引导到树莓派。
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

@@ -1,3 +1,7 @@
+/*
+ * 文件作用：车辆状态构建实现：把硬件、定位和任务信息汇总成状态快照。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_mission/vehicle_state_builder.hpp"
 
 #include <cmath>
@@ -6,10 +10,12 @@ namespace cleanbot {
 namespace mission {
 namespace {
 
+// 判断正在执行的任务是否存在有效故障码。
 bool hasActiveFault(const VehicleStateInput& input) {
   return input.mission_active && !input.fault_code.empty();
 }
 
+// 根据配置状态和最终命令优先级推导当前控制权来源。
 std::string controlState(const VehicleStateInput& input) {
   if (!input.configured) {
     return "not_ready";
@@ -34,6 +40,7 @@ std::string controlState(const VehicleStateInput& input) {
   }
 }
 
+// 综合配置、故障、硬件和 RTK 状态推导车辆健康等级。
 std::string healthState(const VehicleStateInput& input) {
   if (!input.configured) {
     return "not_ready";
@@ -47,6 +54,7 @@ std::string healthState(const VehicleStateInput& input) {
   return "ready";
 }
 
+// 按故障、暂停、生命周期信息的优先级选择对外状态说明。
 std::string stateMessage(const VehicleStateInput& input) {
   if (hasActiveFault(input) && !input.fault_message.empty()) {
     return input.fault_message;
@@ -62,6 +70,7 @@ std::string stateMessage(const VehicleStateInput& input) {
 
 }  // namespace
 
+// 汇总任务与车辆输入，生成供话题和 HTTP 使用的状态快照。
 VehicleStateSnapshot build_vehicle_state(const VehicleStateInput& input) {
   VehicleStateSnapshot state;
   state.control_state = controlState(input);

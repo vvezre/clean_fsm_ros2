@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 文件作用：加载 Cleanbot ROS2 环境，并以隔离的运行目录执行 ros2 命令行工具。
 set -euo pipefail
 
 source /opt/ros/humble/setup.bash

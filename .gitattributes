@@ -1,3 +1,4 @@
+# 文件作用：统一仓库文本文件的换行格式，避免跨平台提交产生无关差异。
 * text=auto eol=lf
 
 *.sh text eol=lf

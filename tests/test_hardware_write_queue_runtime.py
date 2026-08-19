@@ -1,3 +1,4 @@
+# 文件作用：验证 hardware write queue runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -28,6 +29,7 @@ cppyy.add_include_path(str(PACKAGE / "src"))
 cppyy.cppdef('#include "write_queue.cpp"\n')
 
 
+# 辅助方法：为 byte_vector 测试场景准备输入、执行操作或整理结果。
 def byte_vector(values):
     result = cppyy.gbl.std.vector["unsigned char"]()
     for value in values:
@@ -35,10 +37,12 @@ def byte_vector(values):
     return result
 
 
+# 辅助方法：为 as_list 测试场景准备输入、执行操作或整理结果。
 def as_list(values):
     return [ord(value) for value in values]
 
 
+# 辅助方法：为 enum_value 测试场景准备输入、执行操作或整理结果。
 def enum_value(value):
     try:
         return int(value)
@@ -47,6 +51,7 @@ def enum_value(value):
 
 
 class HardwareWriteQueueRuntimeTest(unittest.TestCase):
+    # 测试作用：验证“continuous_writes_coalesce_to_latest_frame”场景的契约、输出结果和边界行为。
     def test_continuous_writes_coalesce_to_latest_frame(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(8)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority.kContinuous
@@ -57,6 +62,7 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         self.assertEqual(queue.size(), 1)
         self.assertEqual(as_list(queue.front()), [2])
 
+    # 测试作用：验证“ack_and_safety_run_before_waiting_motion”场景的契约、输出结果和边界行为。
     def test_ack_and_safety_run_before_waiting_motion(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(8)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
@@ -64,7 +70,7 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         queue.enqueue(byte_vector([1]), priority.kContinuous, "motion", False)
         queue.enqueue(byte_vector([2]), priority.kFinite, "", True)
         queue.enqueue(byte_vector([3]), priority.kSafety, "brake", True)
-        queue.enqueue(byte_vector([4]), priority.kProtocolAck, "ack-4", True)
+        queue.enqueue(byte_vector([4]), priority.kCritical, "critical-4", True)
 
         self.assertEqual(as_list(queue.front()), [1])
         queue.pop_front()
@@ -74,6 +80,7 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         queue.pop_front()
         self.assertEqual(as_list(queue.front()), [2])
 
+    # 测试作用：验证“full_queue_drops_low_priority_not_ack_or_safety”场景的契约、输出结果和边界行为。
     def test_full_queue_drops_low_priority_not_ack_or_safety(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(3)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
@@ -81,7 +88,7 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         queue.enqueue(byte_vector([1]), priority.kContinuous, "", False)
         queue.enqueue(byte_vector([2]), priority.kFinite, "", False)
         queue.enqueue(byte_vector([3]), priority.kSafety, "brake", False)
-        self.assertTrue(queue.enqueue(byte_vector([4]), priority.kProtocolAck, "ack-4", False))
+        self.assertTrue(queue.enqueue(byte_vector([4]), priority.kCritical, "critical-4", False))
 
         frames = []
         while not queue.empty():
@@ -89,18 +96,20 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
             queue.pop_front()
         self.assertEqual(frames, [4, 3, 2])
 
+    # 测试作用：验证“full_high_priority_queue_rejects_without_growing”场景的契约、输出结果和边界行为。
     def test_full_high_priority_queue_rejects_without_growing(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(2)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
 
         self.assertTrue(queue.enqueue(byte_vector([1]), priority.kSafety, "brake-1", False))
-        self.assertTrue(queue.enqueue(byte_vector([2]), priority.kProtocolAck, "ack-2", False))
+        self.assertTrue(queue.enqueue(byte_vector([2]), priority.kCritical, "critical-2", False))
 
         self.assertFalse(
-            queue.enqueue(byte_vector([3]), priority.kProtocolAck, "ack-3", False)
+            queue.enqueue(byte_vector([3]), priority.kCritical, "critical-3", False)
         )
         self.assertEqual(queue.size(), 2)
 
+    # 测试作用：验证“low_priority_frame_cannot_evict_accepted_finite_command”场景的契约、输出结果和边界行为。
     def test_low_priority_frame_cannot_evict_accepted_finite_command(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(2)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
@@ -114,11 +123,13 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         self.assertEqual(queue.size(), 2)
         self.assertEqual(as_list(queue.front()), [1])
 
+    # 测试作用：验证“replaced_queue_item_receives_superseded_event”场景的契约、输出结果和边界行为。
     def test_replaced_queue_item_receives_superseded_event(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(2)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
         events = []
 
+        # 辅助方法：为 record 测试场景准备输入、执行操作或整理结果。
         def record(event):
             events.append(enum_value(event))
 
@@ -133,6 +144,7 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         self.assertEqual(queue.size(), 1)
         self.assertEqual(as_list(queue.front()), [2])
 
+    # 测试作用：验证“unsent_brake_is_replaced_without_touching_active_frame”场景的契约、输出结果和边界行为。
     def test_unsent_brake_is_replaced_without_touching_active_frame(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(3)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
@@ -146,6 +158,7 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
         queue.pop_front()
         self.assertEqual(as_list(queue.front()), [3])
 
+    # 测试作用：验证“active_frame_storage_remains_stable_when_priority_items_arrive”场景的契约、输出结果和边界行为。
     def test_active_frame_storage_remains_stable_when_priority_items_arrive(self):
         queue = cppyy.gbl.cleanbot.hardware.PriorityWriteQueue(8)
         priority = cppyy.gbl.cleanbot.hardware.WritePriority
@@ -154,11 +167,12 @@ class HardwareWriteQueueRuntimeTest(unittest.TestCase):
 
         queue.enqueue(byte_vector([4]), priority.kFinite, "", True)
         queue.enqueue(byte_vector([5]), priority.kSafety, "brake", True)
-        queue.enqueue(byte_vector([6]), priority.kProtocolAck, "ack", True)
+        queue.enqueue(byte_vector([6]), priority.kCritical, "critical", True)
 
         self.assertEqual(cppyy.addressof(queue.front()), before)
         self.assertEqual(as_list(queue.front()), [1, 2, 3])
 
+    # 测试作用：验证“brush_only_status_zero_is_continuous_not_safety”场景的契约、输出结果和边界行为。
     def test_brush_only_status_zero_is_continuous_not_safety(self):
         classify = cppyy.gbl.cleanbot.hardware.classify_command_frame
         priority = cppyy.gbl.cleanbot.hardware.WritePriority

@@ -1,3 +1,4 @@
+# 文件作用：验证 rtcm3 frame buffer runtime 相关契约、运行逻辑和边界条件。
 import ctypes
 import os
 import sysconfig
@@ -28,6 +29,7 @@ cppyy.add_include_path(str(PACKAGE / "src"))
 cppyy.cppdef('#include "rtcm3_frame_buffer.cpp"\n')
 
 
+# 辅助方法：为 byte_vector 测试场景准备输入、执行操作或整理结果。
 def byte_vector(data):
     result = cppyy.gbl.std.vector["unsigned char"]()
     for value in data:
@@ -35,10 +37,12 @@ def byte_vector(data):
     return result
 
 
+# 辅助方法：为 as_bytes 测试场景准备输入、执行操作或整理结果。
 def as_bytes(values):
     return bytes(ord(value) for value in values)
 
 
+# 辅助方法：为 crc24q 测试场景准备输入、执行操作或整理结果。
 def crc24q(data):
     crc = 0
     for value in data:
@@ -50,6 +54,7 @@ def crc24q(data):
     return crc & 0xFFFFFF
 
 
+# 辅助方法：为 rtcm_frame 测试场景准备输入、执行操作或整理结果。
 def rtcm_frame(payload):
     header = bytes([0xD3, (len(payload) >> 8) & 0x03, len(payload) & 0xFF])
     body = header + bytes(payload)
@@ -58,6 +63,7 @@ def rtcm_frame(payload):
 
 
 class Rtcm3FrameBufferRuntimeTest(unittest.TestCase):
+    # 测试作用：验证“reassembles_split_frame_and_extracts_sticky_frames”场景的契约、输出结果和边界行为。
     def test_reassembles_split_frame_and_extracts_sticky_frames(self):
         buffer = cppyy.gbl.cleanbot.rtk.Rtcm3FrameBuffer(4096)
         first = rtcm_frame([0x3E, 0xD0, 0x01, 0x02])
@@ -73,6 +79,7 @@ class Rtcm3FrameBufferRuntimeTest(unittest.TestCase):
         self.assertTrue(buffer.pop(frame))
         self.assertEqual(as_bytes(frame), second)
 
+    # 测试作用：验证“discards_bad_crc_and_resynchronizes_to_next_frame”场景的契约、输出结果和边界行为。
     def test_discards_bad_crc_and_resynchronizes_to_next_frame(self):
         buffer = cppyy.gbl.cleanbot.rtk.Rtcm3FrameBuffer(4096)
         bad = bytearray(rtcm_frame([1, 2, 3]))
@@ -86,6 +93,7 @@ class Rtcm3FrameBufferRuntimeTest(unittest.TestCase):
         self.assertEqual(as_bytes(frame), good)
         self.assertEqual(buffer.invalid_crc_count(), 1)
 
+    # 测试作用：验证“buffer_remains_bounded_under_noise”场景的契约、输出结果和边界行为。
     def test_buffer_remains_bounded_under_noise(self):
         buffer = cppyy.gbl.cleanbot.rtk.Rtcm3FrameBuffer(64)
         buffer.append(byte_vector(b"x" * 1000))

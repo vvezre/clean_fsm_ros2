@@ -5,14 +5,17 @@
 #include <string>
 #include <vector>
 
+// 文件作用：定义建模、区域识别、覆盖规划和任务计划共享的数据模型。
 namespace cleanbot {
 namespace modeling {
 
+// 局部平面坐标，单位为厘米。
 struct Point2d {
   double x_cm{0.0};
   double y_cm{0.0};
 };
 
+// 用户采集的单个 RTK 模型点及其识别结果。
 struct ModelPoint {
   std::string id;
   std::size_t sequence{0u};
@@ -33,6 +36,7 @@ struct ModelPoint {
   std::string source{"rtk_mean"};
 };
 
+// 由边界点围成的一个子区域。
 struct ModelSubArea {
   std::string id;
   std::string name;
@@ -40,6 +44,7 @@ struct ModelSubArea {
   bool confirmed{false};
 };
 
+// 连接两个子区域的通行段。
 struct ModelConnector {
   std::string id;
   std::string type{"sub_area_connector"};
@@ -51,6 +56,7 @@ struct ModelConnector {
   bool confirmed{false};
 };
 
+// 一个清扫区域组的原始点、识别结果和连接关系。
 struct ModelGroup {
   std::string id;
   std::string name;
@@ -65,6 +71,7 @@ struct ModelGroup {
   std::vector<ModelConnector> connectors;
 };
 
+// 可编辑或已正式发布的完整清扫模型。
 struct CleaningModel {
   std::string id;
   std::string name;
@@ -79,6 +86,7 @@ struct CleaningModel {
   std::vector<ModelGroup> groups;
 };
 
+// 清扫计划中的一段直线、转场或动作段。
 struct PlanSegment {
   std::size_t index{0u};
   std::string id;
@@ -99,6 +107,7 @@ struct PlanSegment {
   bool brush_enabled{false};
 };
 
+// 由清扫模型生成、可交给任务模块执行的完整计划。
 struct CleaningPlan {
   std::string id;
   std::string model_id;

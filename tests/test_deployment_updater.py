@@ -1,3 +1,4 @@
+# 文件作用：验证 deployment updater 相关契约、运行逻辑和边界条件。
 import hashlib
 import importlib.util
 import io
@@ -18,6 +19,7 @@ MODULE_PATH = (
 )
 
 
+# 辅助方法：读取或加载 load_updater_module 所需的测试数据并返回解析结果。
 def load_updater_module():
     if not MODULE_PATH.is_file():
         raise AssertionError(f"updater module is missing: {MODULE_PATH}")
@@ -29,6 +31,7 @@ def load_updater_module():
     return module
 
 
+# 辅助方法：为 manifest 测试场景准备输入、执行操作或整理结果。
 def manifest(archive_bytes=b"archive"):
     return {
         "schemaVersion": 1,
@@ -49,27 +52,34 @@ def manifest(archive_bytes=b"archive"):
 
 
 class FakeHttpResponse:
+    # 辅助方法：为 __init__ 测试场景准备输入、执行操作或整理结果。
     def __init__(self, payload):
         self._payload = io.BytesIO(payload)
 
+    # 辅助方法：读取或加载 read 所需的测试数据并返回解析结果。
     def read(self, size=-1):
         return self._payload.read(size)
 
+    # 辅助方法：为 __enter__ 测试场景准备输入、执行操作或整理结果。
     def __enter__(self):
         return self
 
+    # 辅助方法：为 __exit__ 测试场景准备输入、执行操作或整理结果。
     def __exit__(self, exception_type, exception, traceback):
         return False
 
 
 class DeploymentUpdaterTest(unittest.TestCase):
+    # 类级初始化：准备本测试类共享的编译产物、临时目录和运行依赖。
     @classmethod
     def setUpClass(cls):
         cls.updater = load_updater_module()
 
+    # 辅助方法：为 canonical 测试场景准备输入、执行操作或整理结果。
     def canonical(self, value):
         return self.updater.canonical_json_bytes(value)
 
+    # 测试作用：验证“parses_only_canonical_strict_manifest”场景的契约、输出结果和边界行为。
     def test_parses_only_canonical_strict_manifest(self):
         value = manifest()
         encoded = self.canonical(value)
@@ -92,6 +102,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 expected_ros="humble",
             )
 
+    # 测试作用：验证“rejects_duplicate_fields_unknown_fields_and_unsafe_release”场景的契约、输出结果和边界行为。
     def test_rejects_duplicate_fields_unknown_fields_and_unsafe_release(self):
         duplicate = (
             b'{"archive":{},"createdAt":"x","release":"v1",'
@@ -122,6 +133,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 "humble",
             )
 
+    # 测试作用：验证“rejects_wrong_target_hash_and_size_bounds”场景的契约、输出结果和边界行为。
     def test_rejects_wrong_target_hash_and_size_bounds(self):
         for field, value in (
             ("architecture", "x86_64"),
@@ -160,6 +172,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 "humble",
             )
 
+    # 测试作用：验证“selects_three_assets_from_one_stable_release”场景的契约、输出结果和边界行为。
     def test_selects_three_assets_from_one_stable_release(self):
         names = self.updater.REQUIRED_RELEASE_ASSETS
         payload = {
@@ -184,6 +197,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         with self.assertRaises(self.updater.ReleaseError):
             self.updater.select_release_assets(payload)
 
+    # 测试作用：验证“rejects_duplicate_missing_or_non_https_release_assets”场景的契约、输出结果和边界行为。
     def test_rejects_duplicate_missing_or_non_https_release_assets(self):
         names = self.updater.REQUIRED_RELEASE_ASSETS
         base = {
@@ -243,6 +257,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         with self.assertRaises(self.updater.ReleaseError):
             self.updater.select_release_assets(oversized_metadata)
 
+    # 测试作用：验证“fetches_latest_release_once_with_fixed_github_api_request”场景的契约、输出结果和边界行为。
     def test_fetches_latest_release_once_with_fixed_github_api_request(self):
         names = self.updater.REQUIRED_RELEASE_ASSETS
         payload = {
@@ -260,6 +275,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         }
         calls = []
 
+        # 测试替身作用：模拟 opener 依赖的返回结果、调用记录或异常路径。
         def opener(request, *, timeout):
             calls.append((request, timeout))
             return FakeHttpResponse(json.dumps(payload).encode("utf-8"))
@@ -286,6 +302,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         self.assertIn("cleanbot-updater/", request.get_header("User-agent"))
         self.assertIsNone(request.get_header("Authorization"))
 
+    # 测试作用：验证“fetch_latest_release_rejects_oversized_or_invalid_json”场景的契约、输出结果和边界行为。
     def test_fetch_latest_release_rejects_oversized_or_invalid_json(self):
         for payload in (
             b"x" * (self.updater.MAX_RELEASE_RESPONSE_BYTES + 1),
@@ -298,6 +315,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                         opener=lambda request, timeout: FakeHttpResponse(payload),
                     )
 
+    # 测试作用：验证“downloads_asset_to_atomic_destination_with_exact_size”场景的契约、输出结果和边界行为。
     def test_downloads_asset_to_atomic_destination_with_exact_size(self):
         payload = b"signed release bytes"
         asset = self.updater.ReleaseAsset(
@@ -307,6 +325,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         )
         calls = []
 
+        # 测试替身作用：模拟 opener 依赖的返回结果、调用记录或异常路径。
         def opener(request, *, timeout):
             calls.append((request, timeout))
             return FakeHttpResponse(payload)
@@ -335,6 +354,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     for path in destination.parent.iterdir())
             )
 
+    # 测试作用：验证“download_rejects_wrong_size_and_leaves_no_partial_file”场景的契约、输出结果和边界行为。
     def test_download_rejects_wrong_size_and_leaves_no_partial_file(self):
         asset = self.updater.ReleaseAsset(
             self.updater.MANIFEST_ASSET,
@@ -353,6 +373,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertFalse(destination.exists())
             self.assertEqual(list(destination.parent.iterdir()), [])
 
+    # 测试作用：验证“verifies_archive_size_and_sha256”场景的契约、输出结果和边界行为。
     def test_verifies_archive_size_and_sha256(self):
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "release.tar.gz"
@@ -368,6 +389,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             with self.assertRaises(self.updater.VerificationError):
                 self.updater.verify_archive(archive, parsed.archive)
 
+    # 测试作用：验证“ed25519_manifest_signature_round_trip_with_openssl”场景的契约、输出结果和边界行为。
     def test_ed25519_manifest_signature_round_trip_with_openssl(self):
         openssl = shutil.which("openssl")
         if openssl is None:
@@ -454,6 +476,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     openssl=openssl,
                 )
 
+    # 辅助方法：构造 make_tar 所需的测试对象、参数或临时资源。
     def make_tar(self, path, entries):
         with tarfile.open(path, "w:gz") as archive:
             for name, kind, data in entries:
@@ -471,6 +494,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     info.linkname = data.decode("utf-8")
                     archive.addfile(info)
 
+    # 测试作用：验证“secure_extract_accepts_regular_release_tree”场景的契约、输出结果和边界行为。
     def test_secure_extract_accepts_regular_release_tree(self):
         if not hasattr(tarfile, "data_filter"):
             self.skipTest("secure tar data_filter is unavailable")
@@ -500,6 +524,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             )
             self.assertTrue((destination / "install/setup.bash").is_file())
 
+    # 测试作用：验证“secure_extract_rejects_traversal_links_and_duplicates”场景的契约、输出结果和边界行为。
     def test_secure_extract_rejects_traversal_links_and_duplicates(self):
         if not hasattr(tarfile, "data_filter"):
             self.skipTest("secure tar data_filter is unavailable")
@@ -527,6 +552,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                             maximum_unpacked_bytes=1024,
                         )
 
+    # 测试作用：验证“strict_config_defaults_to_download_without_automatic_apply”场景的契约、输出结果和边界行为。
     def test_strict_config_defaults_to_download_without_automatic_apply(self):
         value = {
             "schemaVersion": 1,
@@ -556,6 +582,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         with self.assertRaises(self.updater.ConfigError):
             self.updater.parse_config(json.dumps(value).encode("utf-8"))
 
+    # 测试作用：验证“stage_release_verifies_signature_archive_and_version”场景的契约、输出结果和边界行为。
     def test_stage_release_verifies_signature_archive_and_version(self):
         if not hasattr(tarfile, "data_filter"):
             self.skipTest("secure tar data_filter is unavailable")
@@ -615,6 +642,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     signature_verifier=lambda *args: None,
                 )
 
+    # 测试作用：验证“reloads_staged_release_and_reverifies_signed_archive”场景的契约、输出结果和边界行为。
     def test_reloads_staged_release_and_reverifies_signed_archive(self):
         if not hasattr(tarfile, "data_filter"):
             self.skipTest("secure tar data_filter is unavailable")
@@ -689,6 +717,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     signature_verifier=lambda *args: None,
                 )
 
+    # 测试作用：验证“update_state_is_strict_and_atomically_replaced”场景的契约、输出结果和边界行为。
     def test_update_state_is_strict_and_atomically_replaced(self):
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.json"
@@ -714,6 +743,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             with self.assertRaises(self.updater.StateError):
                 self.updater.load_update_state(state_path)
 
+    # 测试作用：验证“current_release_symlink_switch_is_contained_and_atomic”场景的契约、输出结果和边界行为。
     @unittest.skipIf(os.name == "nt", "POSIX symlink switching is Linux-only")
     def test_current_release_symlink_switch_is_contained_and_atomic(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -740,6 +770,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     current, outside, releases
                 )
 
+    # 测试作用：验证“parses_maintenance_service_and_state_output_fail_closed”场景的契约、输出结果和边界行为。
     def test_parses_maintenance_service_and_state_output_fail_closed(self):
         accepted = self.updater.parse_maintenance_service_output(
             "response:\naccepted: true\ngate_active: true\n"
@@ -768,6 +799,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             )
         )
 
+    # 测试作用：验证“maintenance_service_parser_uses_response_generation_not_request”场景的契约、输出结果和边界行为。
     def test_maintenance_service_parser_uses_response_generation_not_request(self):
         output = (
             "requester: making request: "
@@ -786,9 +818,11 @@ class DeploymentUpdaterTest(unittest.TestCase):
         self.assertTrue(result.accepted)
         self.assertTrue(result.gate_active)
 
+    # 测试作用：验证“calls_maintenance_service_with_fixed_argv_and_exact_token”场景的契约、输出结果和边界行为。
     def test_calls_maintenance_service_with_fixed_argv_and_exact_token(self):
         calls = []
 
+        # 测试替身作用：模拟 runner 依赖的返回结果、调用记录或异常路径。
         def runner(argv, **options):
             calls.append((argv, options))
             return subprocess.CompletedProcess(
@@ -851,6 +885,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         self.assertEqual(enable_options["timeout"], 12)
         self.assertFalse(enable_options["shell"])
 
+    # 测试作用：验证“maintenance_service_rejects_invalid_input_or_command_failure”场景的契约、输出结果和边界行为。
     def test_maintenance_service_rejects_invalid_input_or_command_failure(self):
         for requester in ("", "../unsafe", "space value"):
             with self.subTest(requester=requester):
@@ -863,6 +898,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                         runner=lambda *args, **kwargs: None,
                     )
 
+        # 辅助方法：为 failed_runner 测试场景准备输入、执行操作或整理结果。
         def failed_runner(argv, **options):
             return subprocess.CompletedProcess(
                 argv, 1, stdout="", stderr="service unavailable"
@@ -877,9 +913,11 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 runner=failed_runner,
             )
 
+    # 测试作用：验证“reads_exact_generation_maintenance_readiness_with_fixed_argv”场景的契约、输出结果和边界行为。
     def test_reads_exact_generation_maintenance_readiness_with_fixed_argv(self):
         calls = []
 
+        # 测试替身作用：模拟 runner 依赖的返回结果、调用记录或异常路径。
         def runner(argv, **options):
             calls.append((argv, options))
             return subprocess.CompletedProcess(
@@ -916,9 +954,11 @@ class DeploymentUpdaterTest(unittest.TestCase):
         )
         self.assertFalse(options["shell"])
 
+    # 测试作用：验证“controls_only_valid_cleanbot_systemd_service_with_fixed_argv”场景的契约、输出结果和边界行为。
     def test_controls_only_valid_cleanbot_systemd_service_with_fixed_argv(self):
         calls = []
 
+        # 测试替身作用：模拟 runner 依赖的返回结果、调用记录或异常路径。
         def runner(argv, **options):
             calls.append((argv, options))
             return subprocess.CompletedProcess(
@@ -946,9 +986,11 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     action, service, runner=runner
                 )
 
+    # 测试作用：验证“health_check_requires_systemd_and_exact_maintenance_service_type”场景的契约、输出结果和边界行为。
     def test_health_check_requires_systemd_and_exact_maintenance_service_type(self):
         calls = []
 
+        # 测试替身作用：模拟 runner 依赖的返回结果、调用记录或异常路径。
         def runner(argv, **options):
             calls.append(argv)
             if argv[:3] == ["systemctl", "is-active", "--quiet"]:
@@ -989,6 +1031,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             ],
         )
 
+        # 辅助方法：为 wrong_type 测试场景准备输入、执行操作或整理结果。
         def wrong_type(argv, **options):
             return subprocess.CompletedProcess(
                 argv, 0, stdout="wrong/Service\n", stderr=""
@@ -1000,6 +1043,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             )
         )
 
+    # 测试作用：验证“installs_staged_payload_into_release_root”场景的契约、输出结果和边界行为。
     def test_installs_staged_payload_into_release_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1031,6 +1075,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     for path in releases.iterdir())
             )
 
+    # 测试作用：验证“installed_release_root_is_traversable_by_service_user”场景的契约、输出结果和边界行为。
     @unittest.skipIf(os.name == "nt", "POSIX release permissions are Linux-only")
     def test_installed_release_root_is_traversable_by_service_user(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1052,6 +1097,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
 
             self.assertEqual(stat.S_IMODE(installed.stat().st_mode), 0o755)
 
+    # 辅助方法：为 updater_config_for 测试场景准备输入、执行操作或整理结果。
     def updater_config_for(self, root):
         return self.updater.UpdaterConfig(
             repository="vvezre/clean_fsm_ros2",
@@ -1066,6 +1112,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             auto_apply=False,
         )
 
+    # 测试作用：验证“apply_release_stops_switches_health_checks_and_releases_token”场景的契约、输出结果和边界行为。
     def test_apply_release_stops_switches_health_checks_and_releases_token(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1078,6 +1125,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             events = []
             states = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     (
@@ -1094,22 +1142,27 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     "OK",
                 )
 
+            # 辅助方法：读取或加载 ready 所需的测试数据并返回解析结果。
             def ready(generation):
                 events.append(("ready", generation))
                 return True
 
+            # 辅助方法：为 service 测试场景准备输入、执行操作或整理结果。
             def service(action, service_name):
                 events.append(("service", action, service_name))
 
+            # 辅助方法：为 install 测试场景准备输入、执行操作或整理结果。
             def install(staged, release, releases):
                 events.append(("install", release))
                 new_release.mkdir(parents=True)
                 return new_release
 
+            # 辅助方法：为 switch 测试场景准备输入、执行操作或整理结果。
             def switch(current, target, releases):
                 events.append(("switch", target.name))
                 return old_release
 
+            # 辅助方法：为 health 测试场景准备输入、执行操作或整理结果。
             def health(service_name):
                 events.append(("health", service_name))
                 return True
@@ -1164,6 +1217,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ["APPLYING", "HEALTH_CHECK", "IDLE"],
             )
 
+    # 测试作用：验证“apply_release_rolls_back_when_new_service_is_unhealthy”场景的契约、输出结果和边界行为。
     def test_apply_release_rolls_back_when_new_service_is_unhealthy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1177,6 +1231,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             states = []
             health_results = iter((False, True))
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     (
@@ -1189,6 +1244,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     True, request["enable"], False, 42, "OK"
                 )
 
+            # 辅助方法：为 switch 测试场景准备输入、执行操作或整理结果。
             def switch(current, target, releases):
                 events.append(("switch", target.name))
                 if target == new_release:
@@ -1244,6 +1300,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertEqual(states[-1].staged_release, "v1.2.3")
             self.assertNotEqual(states[-1].last_error, "")
 
+    # 测试作用：验证“apply_keeps_maintenance_active_when_rollback_is_unhealthy”场景的契约、输出结果和边界行为。
     def test_apply_keeps_maintenance_active_when_rollback_is_unhealthy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1255,6 +1312,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             old_release.mkdir(parents=True)
             maintenance_requests = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 maintenance_requests.append(
                     (request["enable"], request["generation"])
@@ -1288,6 +1346,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
 
             self.assertEqual(maintenance_requests, [(True, 0)])
 
+    # 测试作用：验证“apply_stays_stopped_if_switch_has_no_rollback_target”场景的契约、输出结果和边界行为。
     def test_apply_stays_stopped_if_switch_has_no_rollback_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1298,6 +1357,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             events = []
             states = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     ("maintenance", request["enable"], request["generation"])
@@ -1344,6 +1404,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertEqual(states[-1].phase, "FAILED")
             self.assertEqual(states[-1].current_release, "v1.2.3")
 
+    # 测试作用：验证“apply_does_not_rollback_after_maintenance_was_released”场景的契约、输出结果和边界行为。
     def test_apply_does_not_rollback_after_maintenance_was_released(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1355,6 +1416,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             old_release.mkdir(parents=True)
             events = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     ("maintenance", request["enable"], request["generation"])
@@ -1363,6 +1425,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     True, request["enable"], False, 91, "OK"
                 )
 
+            # 辅助方法：为 state_writer 测试场景准备输入、执行操作或整理结果。
             def state_writer(path, state):
                 if state.phase == "IDLE":
                     raise self.updater.StateError("disk full")
@@ -1403,6 +1466,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ],
             )
 
+    # 测试作用：验证“apply_release_timeout_releases_maintenance_without_stopping_service”场景的契约、输出结果和边界行为。
     def test_apply_release_timeout_releases_maintenance_without_stopping_service(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1412,6 +1476,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             events = []
             states = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     (
@@ -1465,6 +1530,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ["APPLYING", "FAILED"],
             )
 
+    # 测试作用：验证“stages_latest_release_from_one_github_release_response”场景的契约、输出结果和边界行为。
     def test_stages_latest_release_from_one_github_release_response(self):
         if not hasattr(tarfile, "data_filter"):
             self.skipTest("secure tar data_filter is unavailable")
@@ -1518,6 +1584,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             }
             calls = []
 
+            # 测试替身作用：模拟 opener 依赖的返回结果、调用记录或异常路径。
             def opener(request, *, timeout):
                 calls.append(request.full_url)
                 return FakeHttpResponse(responses[request.full_url])
@@ -1556,6 +1623,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ["v1.2.3"],
             )
 
+    # 测试作用：验证“stage_latest_release_does_nothing_when_already_current”场景的契约、输出结果和边界行为。
     def test_stage_latest_release_does_nothing_when_already_current(self):
         payload = {
             "tag_name": "v1.2.3",
@@ -1589,6 +1657,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertIsNone(staged)
             self.assertEqual(states, [])
 
+    # 测试作用：验证“stage_latest_release_rejects_automatic_downgrade”场景的契约、输出结果和边界行为。
     def test_stage_latest_release_rejects_automatic_downgrade(self):
         payload = {
             "tag_name": "v1.2.2",
@@ -1622,6 +1691,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
 
             self.assertEqual(states, [])
 
+    # 测试作用：验证“failed_download_state_can_retry_staging”场景的契约、输出结果和边界行为。
     def test_failed_download_state_can_retry_staging(self):
         payload = {
             "tag_name": "v1.2.3",
@@ -1657,6 +1727,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertEqual(states[0].phase, "IDLE")
             self.assertEqual(states[0].last_error, "")
 
+    # 测试作用：验证“manual_rollback_switches_to_previous_healthy_release”场景的契约、输出结果和边界行为。
     def test_manual_rollback_switches_to_previous_healthy_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1668,6 +1739,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             events = []
             states = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     (
@@ -1718,6 +1790,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ["ROLLING_BACK", "HEALTH_CHECK", "IDLE"],
             )
 
+    # 测试作用：验证“manual_rollback_keeps_maintenance_when_recovery_is_unhealthy”场景的契约、输出结果和边界行为。
     def test_manual_rollback_keeps_maintenance_when_recovery_is_unhealthy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1728,6 +1801,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             previous.mkdir(parents=True)
             maintenance_requests = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 maintenance_requests.append(
                     (request["enable"], request["generation"])
@@ -1757,6 +1831,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
 
             self.assertEqual(maintenance_requests, [(True, 0)])
 
+    # 测试作用：验证“manual_rollback_does_not_switch_after_maintenance_was_released”场景的契约、输出结果和边界行为。
     def test_manual_rollback_does_not_switch_after_maintenance_was_released(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1767,6 +1842,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             previous.mkdir(parents=True)
             events = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     ("maintenance", request["enable"], request["generation"])
@@ -1775,6 +1851,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     True, request["enable"], False, 72, "OK"
                 )
 
+            # 辅助方法：为 state_writer 测试场景准备输入、执行操作或整理结果。
             def state_writer(path, state):
                 if state.phase == "IDLE":
                     raise self.updater.StateError("disk full")
@@ -1811,6 +1888,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ],
             )
 
+    # 测试作用：验证“manual_rollback_recovers_if_switch_reports_wrong_previous_release”场景的契约、输出结果和边界行为。
     def test_manual_rollback_recovers_if_switch_reports_wrong_previous_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1822,6 +1900,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 release.mkdir(parents=True)
             events = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     ("maintenance", request["enable"], request["generation"])
@@ -1830,6 +1909,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     True, request["enable"], False, 73, "OK"
                 )
 
+            # 辅助方法：为 switch 测试场景准备输入、执行操作或整理结果。
             def switch(link, target, releases):
                 events.append(("switch", target.name))
                 if target == previous:
@@ -1868,6 +1948,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                 ],
             )
 
+    # 测试作用：验证“cli_exposes_check_stage_apply_rollback_status_and_auto”场景的契约、输出结果和边界行为。
     def test_cli_exposes_check_stage_apply_rollback_status_and_auto(self):
         parser = self.updater.build_cli_parser()
 
@@ -1889,6 +1970,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
                     "/etc/cleanbot/updater.json",
                 )
 
+    # 测试作用：验证“status_payload_reports_current_previous_staged_phase_and_error”场景的契约、输出结果和边界行为。
     def test_status_payload_reports_current_previous_staged_phase_and_error(self):
         value = self.updater.status_object(
             self.updater.UpdateState(
@@ -1911,6 +1993,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             },
         )
 
+    # 测试作用：验证“cli_status_and_check_dispatch_without_network_side_effects”场景的契约、输出结果和边界行为。
     def test_cli_status_and_check_dispatch_without_network_side_effects(self):
         output = io.StringIO()
         state = self.updater.UpdateState(
@@ -1957,6 +2040,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             },
         )
 
+    # 测试作用：验证“cli_auto_stages_but_does_not_apply_when_auto_apply_is_false”场景的契约、输出结果和边界行为。
     def test_cli_auto_stages_but_does_not_apply_when_auto_apply_is_false(self):
         output = io.StringIO()
         root = Path("C:/unused")
@@ -1984,6 +2068,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
         self.assertEqual(calls, ["stage"])
         self.assertEqual(json.loads(output.getvalue())["result"], "staged")
 
+    # 测试作用：验证“recovers_interrupted_download_to_idle_and_removes_only_its_temps”场景的契约、输出结果和边界行为。
     def test_recovers_interrupted_download_to_idle_and_removes_only_its_temps(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2014,6 +2099,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertTrue(unrelated.exists())
             self.assertEqual(states, [recovered])
 
+    # 测试作用：验证“recovers_interrupted_health_check_to_previous_release”场景的契约、输出结果和边界行为。
     def test_recovers_interrupted_health_check_to_previous_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2032,6 +2118,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             events = []
             states = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 events.append(
                     ("maintenance", request["enable"], request["generation"])
@@ -2081,6 +2168,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             self.assertIn("interrupted", recovered.last_error)
             self.assertEqual(states, [recovered])
 
+    # 测试作用：验证“interrupted_transition_keeps_maintenance_if_recovery_is_unhealthy”场景的契约、输出结果和边界行为。
     def test_interrupted_transition_keeps_maintenance_if_recovery_is_unhealthy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2091,6 +2179,7 @@ class DeploymentUpdaterTest(unittest.TestCase):
             previous.mkdir(parents=True)
             requests = []
 
+            # 辅助方法：为 maintenance_call 测试场景准备输入、执行操作或整理结果。
             def maintenance_call(**request):
                 requests.append((request["enable"], request["generation"]))
                 return self.updater.MaintenanceServiceResult(

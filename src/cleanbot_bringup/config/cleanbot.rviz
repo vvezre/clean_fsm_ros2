@@ -1,0 +1,56 @@
+# 文件作用：定义 RViz 中车辆状态、RTK 和任务调试可视化布局。
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Name: Grid
+      Plane: XY
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Show Axes: true
+      Show Names: true
+      Value: true
+    - Class: rviz_default_plugins/Pose
+      Name: Vehicle Pose
+      Topic:
+        Value: /cleanbot/visualization/vehicle_pose
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Vehicle Path
+      Topic:
+        Value: /cleanbot/visualization/vehicle_path
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Target Path
+      Topic:
+        Value: /cleanbot/visualization/target_path
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Cleaning Model
+      Topic:
+        Value: /cleanbot/visualization/cleaning_model
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Vehicle Status
+      Topic:
+        Value: /cleanbot/visualization/status_marker
+      Value: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+Window Geometry:
+  Height: 900
+  Width: 1440

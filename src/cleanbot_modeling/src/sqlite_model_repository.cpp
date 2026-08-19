@@ -1,3 +1,7 @@
+/*
+ * 文件作用：模型仓库实现：持久化区域、采样点和任务规划数据。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_modeling/sqlite_model_repository.hpp"
 
 #include <sqlite3.h>
@@ -24,10 +28,12 @@ struct MigratedPointRecord {
   double y_cm{0.0};
 };
 
+// 返回 SQLite 最近错误，连接为空时给出明确说明。
 std::string modeling_sqlite_error(sqlite3* database) {
   return database == nullptr ? "database is not open" : sqlite3_errmsg(database);
 }
 
+// 以 SQLITE_TRANSIENT 生命周期将字符串绑定到预编译语句参数。
 void bind_text(
     sqlite3_stmt* statement,
     const int index,
@@ -36,12 +42,14 @@ void bind_text(
       statement, index, value.c_str(), -1, SQLITE_TRANSIENT);
 }
 
+// 安全读取结果列文本，SQL NULL 转换为空字符串。
 std::string column_text(sqlite3_stmt* statement, const int index) {
   const auto* value =
       reinterpret_cast<const char*>(sqlite3_column_text(statement, index));
   return value == nullptr ? "" : value;
 }
 
+// 查询表结构信息，判断迁移目标列是否已经存在。
 bool table_has_column(
     sqlite3* database,
     const std::string& table,
@@ -64,6 +72,7 @@ bool table_has_column(
   return found;
 }
 
+// 将模型点角色列表编码为数据库文本字段。
 std::string join_roles(const std::vector<std::string>& roles) {
   std::ostringstream stream;
   for (std::size_t index = 0u; index < roles.size(); ++index) {
@@ -75,6 +84,7 @@ std::string join_roles(const std::vector<std::string>& roles) {
   return stream.str();
 }
 
+// 将数据库角色文本恢复为有序角色列表。
 std::vector<std::string> split_roles(const std::string& value) {
   std::vector<std::string> roles;
   std::string role;
@@ -94,6 +104,7 @@ std::vector<std::string> split_roles(const std::string& value) {
   return roles;
 }
 
+// 构造仓库初始化或健康检查失败状态。
 ModelRepositoryStatus repository_failure(
     const std::string& code,
     const std::string& message) {
@@ -103,6 +114,7 @@ ModelRepositoryStatus repository_failure(
   return status;
 }
 
+// 构造模型或计划写入失败结果。
 ModelWriteResult write_failure(
     const std::string& code,
     const std::string& message) {
@@ -112,6 +124,7 @@ ModelWriteResult write_failure(
   return result;
 }
 
+// 预编译 SQL 语句，并统一返回 SQLite 错误信息。
 bool prepare(
     sqlite3* database,
     const char* sql,
@@ -124,6 +137,7 @@ bool prepare(
   return false;
 }
 
+// 执行预编译语句并确认其以 SQLITE_DONE 正常完成。
 bool step_done(
     sqlite3* database,
     sqlite3_stmt* statement,
@@ -139,13 +153,16 @@ bool step_done(
 
 using namespace sqlite_model_repository_detail;
 
+// 保存模型数据库路径，延迟到初始化时打开连接。
 SqliteModelRepository::SqliteModelRepository(std::string database_path)
     : database_path_(std::move(database_path)) {}
 
+// 析构时关闭仍打开的 SQLite 连接。
 SqliteModelRepository::~SqliteModelRepository() {
   close();
 }
 
+// 打开数据库，读取版本并创建或迁移到当前架构。
 ModelRepositoryStatus SqliteModelRepository::open_and_initialize() {
   close();
   if (database_path_.empty()) {
@@ -213,6 +230,7 @@ ModelRepositoryStatus SqliteModelRepository::open_and_initialize() {
   return status;
 }
 
+// 在事务中创建模型、区域、点、连接、计划和计划段表。
 bool SqliteModelRepository::create_schema(std::string& error) {
   const char* schema =
       "BEGIN IMMEDIATE;"
@@ -298,6 +316,7 @@ bool SqliteModelRepository::create_schema(std::string& error) {
   return false;
 }
 
+// 按当前版本选择并执行连续数据库迁移步骤。
 bool SqliteModelRepository::migrate_schema(
     const std::uint32_t from_version,
     std::string& error) {
@@ -314,6 +333,7 @@ bool SqliteModelRepository::migrate_schema(
   return false;
 }
 
+// 将 v2 架构升级到 v3，补充模型原点和计划相关字段。
 bool SqliteModelRepository::migrate_v2_to_v3(std::string& error) {
   if (!execute("BEGIN IMMEDIATE", error)) {
     return false;
@@ -370,6 +390,7 @@ bool SqliteModelRepository::migrate_v2_to_v3(std::string& error) {
   return true;
 }
 
+// 将 v1 架构升级到 v2，补充点角色和区域连接数据。
 bool SqliteModelRepository::migrate_v1_to_v2(std::string& error) {
   if (!execute(
           "BEGIN IMMEDIATE;"
@@ -494,6 +515,7 @@ bool SqliteModelRepository::migrate_v1_to_v2(std::string& error) {
   return true;
 }
 
+// 在事务中覆盖保存指定模型的当前草稿及完整子结构。
 ModelWriteResult SqliteModelRepository::save_draft(
     const CleaningModel& model) {
   if (database_ == nullptr) {
@@ -568,6 +590,7 @@ ModelWriteResult SqliteModelRepository::save_draft(
   return result;
 }
 
+// 分配新版本号并保存不可变的正式模型快照。
 ModelWriteResult SqliteModelRepository::save_formal_version(
     const CleaningModel& model) {
   if (database_ == nullptr) {
@@ -649,6 +672,7 @@ ModelWriteResult SqliteModelRepository::save_formal_version(
   return result;
 }
 
+// 将模型组、点、子区域和连接关系写入指定版本快照。
 bool SqliteModelRepository::save_snapshot(
     const CleaningModel& model,
     const std::uint64_t version,
@@ -850,6 +874,7 @@ bool SqliteModelRepository::save_snapshot(
   return true;
 }
 
+// 按模型标识读取当前草稿及其关联结构。
 bool SqliteModelRepository::load_draft(
     const std::string& model_id,
     CleaningModel& model) const {
@@ -886,6 +911,7 @@ bool SqliteModelRepository::load_draft(
   return load_snapshot(model_id, 0u, model);
 }
 
+// 按模型标识和版本号读取正式快照。
 bool SqliteModelRepository::load_version(
     const std::string& model_id,
     const std::uint64_t version,
@@ -925,6 +951,7 @@ bool SqliteModelRepository::load_version(
   return load_snapshot(model_id, version, model);
 }
 
+// 从多张关系表重建完整清扫模型对象。
 bool SqliteModelRepository::load_snapshot(
     const std::string& model_id,
     const std::uint64_t version,
@@ -1073,6 +1100,7 @@ bool SqliteModelRepository::load_snapshot(
   return true;
 }
 
+// 在事务中保存清扫计划元数据及全部有序任务段。
 ModelWriteResult SqliteModelRepository::save_plan(
     const CleaningPlan& plan) {
   if (database_ == nullptr) {
@@ -1195,6 +1223,7 @@ ModelWriteResult SqliteModelRepository::save_plan(
   return result;
 }
 
+// 按计划标识读取计划元数据和有序任务段。
 bool SqliteModelRepository::load_plan(
     const std::string& plan_id,
     CleaningPlan& plan) const {
@@ -1279,6 +1308,7 @@ bool SqliteModelRepository::load_plan(
   return true;
 }
 
+// 查询模型当前最大版本并计算下一可用版本号。
 bool SqliteModelRepository::next_version(
     const std::string& model_id,
     std::uint64_t& version,
@@ -1304,6 +1334,7 @@ bool SqliteModelRepository::next_version(
   return version > 0u;
 }
 
+// 按稳定顺序列出数据库中的全部模型标识。
 std::vector<std::string> SqliteModelRepository::list_model_ids() const {
   std::vector<std::string> ids;
   if (database_ == nullptr) {
@@ -1325,6 +1356,7 @@ std::vector<std::string> SqliteModelRepository::list_model_ids() const {
   return ids;
 }
 
+// 在事务中删除模型草稿、版本、子结构和关联计划。
 bool SqliteModelRepository::delete_model(const std::string& model_id) {
   if (database_ == nullptr || model_id.empty()) {
     return false;
@@ -1380,6 +1412,7 @@ bool SqliteModelRepository::delete_model(const std::string& model_id) {
   return success;
 }
 
+// 执行无需返回结果集的 SQL，并输出失败原因。
 bool SqliteModelRepository::execute(
     const std::string& sql,
     std::string& error) const {
@@ -1396,6 +1429,7 @@ bool SqliteModelRepository::execute(
   return false;
 }
 
+// 关闭 SQLite 数据库并清空连接指针。
 void SqliteModelRepository::close() {
   if (database_ != nullptr) {
     sqlite3_close(database_);

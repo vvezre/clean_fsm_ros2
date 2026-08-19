@@ -1,3 +1,4 @@
+# 文件作用：定义清扫模型中一个区域组及其识别结果消息。
 string id
 string name
 uint32 area_number

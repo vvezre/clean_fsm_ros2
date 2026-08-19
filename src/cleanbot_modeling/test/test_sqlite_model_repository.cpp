@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -6,6 +7,7 @@
 
 namespace {
 
+// 测试目的：验证 SqliteModelRepository.CreatesSchema 场景的行为、状态变化和边界条件。
 TEST(SqliteModelRepository, CreatesSchema) {
   const std::string path = "test-modeling.db";
   std::remove(path.c_str());

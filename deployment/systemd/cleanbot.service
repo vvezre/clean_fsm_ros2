@@ -1,3 +1,4 @@
+# 文件作用：定义树莓派上 Cleanbot ROS2 主运行服务及其权限和环境。
 [Unit]
 Description=Cleanbot ROS2 runtime
 Wants=network-online.target

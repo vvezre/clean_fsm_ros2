@@ -1,9 +1,15 @@
+# 文件作用：清扫建模节点的 CMake 构建、安装与测试声明。
 cmake_minimum_required(VERSION 3.8)
 project(cleanbot_modeling)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Windows 编译器按 UTF-8 解码源码，保证中文注释不会受系统代码页影响。
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(cleanbot_common REQUIRED)

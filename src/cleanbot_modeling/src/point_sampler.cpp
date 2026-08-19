@@ -1,3 +1,7 @@
+/*
+ * 文件作用：点采样实现：在输入区域内生成满足间距约束的采样点。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_modeling/point_sampler.hpp"
 
 #include <algorithm>
@@ -12,10 +16,12 @@ constexpr double kSamplerEarthRadiusM = 6371000.0;
 constexpr double kSamplerPi = 3.14159265358979323846;
 constexpr double kMaximumGgaAgeSec = 2.0;
 
+// 将角度转换为采样距离计算使用的弧度。
 double sampler_radians(const double degrees) {
   return degrees * kSamplerPi / 180.0;
 }
 
+// 使用半正矢公式计算两个 RTK 样本之间的地表距离。
 double sampler_distance_m(
     const double lat_a,
     const double lon_a,
@@ -35,6 +41,7 @@ double sampler_distance_m(
       std::atan2(std::sqrt(bounded), std::sqrt(1.0 - bounded));
 }
 
+// 构造模型点采样失败结果和业务说明。
 SampleResult sample_failure(
     const std::string& code,
     const std::string& message) {
@@ -44,6 +51,7 @@ SampleResult sample_failure(
   return result;
 }
 
+// 判断样本的固定解、中心坐标和经纬度是否可用于建模。
 bool sample_coordinate_valid(const RtkSample& sample) {
   return std::isfinite(sample.lat) && std::isfinite(sample.lon) &&
       sample.lat >= -90.0 && sample.lat <= 90.0 &&
@@ -54,6 +62,7 @@ bool sample_coordinate_valid(const RtkSample& sample) {
 
 using namespace point_sampler_detail;
 
+// 校验样本质量与离散半径，并计算平均坐标和圆周平均航向。
 SampleResult sample_point(
     const std::vector<RtkSample>& samples,
     const std::size_t minimum_samples,

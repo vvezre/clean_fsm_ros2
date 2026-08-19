@@ -1,3 +1,7 @@
+/*
+ * 文件作用：摇杆映射实现：把输入轴值转换为车辆速度和控制命令。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_control/joystick_mapper.hpp"
 
 #include <algorithm>
@@ -6,9 +10,11 @@
 namespace cleanbot {
 namespace control {
 
+// 保存摇杆死区、速度和转向输出限制参数。
 JoystickMapper::JoystickMapper(const JoystickParameters& parameters)
     : parameters_(parameters) {}
 
+// 对摇杆输入限幅、去死区后映射为线速度、转向偏移和制动状态。
 JoystickOutput JoystickMapper::map(double dir_x, double dir_y) const {
   dir_x = std::max(-1.0, std::min(1.0, dir_x));
   dir_y = std::max(-1.0, std::min(1.0, dir_y));

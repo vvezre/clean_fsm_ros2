@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -20,6 +21,7 @@ constexpr std::uint64_t kGeneration = 41u;
 constexpr std::uint64_t kCommandId = 7001u;
 constexpr std::uint64_t kPublisherEpoch = 1u;
 
+// 辅助函数作用：为测试场景提供 brakeCommand 所需的准备、执行或清理逻辑。
 FinalCommandEvidence brakeCommand(
     const std::uint64_t generation = kGeneration,
     const std::uint64_t request_id = kGeneration,
@@ -34,6 +36,7 @@ FinalCommandEvidence brakeCommand(
   return command;
 }
 
+// 辅助函数作用：通过 commandStatus 构造当前测试所需的输入数据。
 CommandStatusEvidence commandStatus(
     const std::uint8_t state,
     const std::uint64_t generation = kGeneration,
@@ -48,6 +51,7 @@ CommandStatusEvidence commandStatus(
   return status;
 }
 
+// 辅助函数作用：为测试场景提供 hardware 所需的准备、执行或清理逻辑。
 HardwareEvidence hardware(
     const std::uint64_t frame_sequence,
     const bool fresh = true,
@@ -67,11 +71,13 @@ HardwareEvidence hardware(
   return sample;
 }
 
+// 辅助函数作用：为测试场景提供 applyBrakeAck 所需的准备、执行或清理逻辑。
 void applyBrakeAck(MaintenanceGate* gate) {
   gate->observeFinalCommand(brakeCommand());
   gate->observeCommandStatus(commandStatus(2u));
 }
 
+// 辅助函数作用：为测试场景提供 hardwareInEpoch 所需的准备、执行或清理逻辑。
 HardwareEvidence hardwareInEpoch(
     const std::uint64_t frame_sequence,
     const std::uint64_t publisher_epoch,
@@ -86,6 +92,7 @@ HardwareEvidence hardwareInEpoch(
       publisher_epoch);
 }
 
+// 辅助函数作用：封装 expectSnapshotsEqual 对应的测试断言，统一核对预期结果。
 void expectSnapshotsEqual(
     const MaintenanceGateSnapshot& actual,
     const MaintenanceGateSnapshot& expected) {
@@ -106,6 +113,7 @@ void expectSnapshotsEqual(
 
 }  // namespace
 
+// 测试目的：验证 MaintenanceGate.RejectsZeroGenerationAndResetsForNewGeneration 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RejectsZeroGenerationAndResetsForNewGeneration) {
   MaintenanceGate gate;
   EXPECT_FALSE(gate.request(0u, true));
@@ -127,6 +135,7 @@ TEST(MaintenanceGate, RejectsZeroGenerationAndResetsForNewGeneration) {
   EXPECT_EQ(snapshot.phase, "WAITING_FOR_COMMAND_GATE");
 }
 
+// 测试目的：验证 MaintenanceGate.RequiresCorrelatedFinalBrakeBeforeCorrelatedAck 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RequiresCorrelatedFinalBrakeBeforeCorrelatedAck) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -144,6 +153,22 @@ TEST(MaintenanceGate, RequiresCorrelatedFinalBrakeBeforeCorrelatedAck) {
   EXPECT_TRUE(gate.snapshot().brake_acknowledged);
 }
 
+// 测试目的：验证 MaintenanceGate.AcceptsLegacyBrakeSentBeforeHardwareZeroConfirmation 场景的行为、状态变化和边界条件。
+TEST(MaintenanceGate, AcceptsLegacyBrakeSentBeforeHardwareZeroConfirmation) {
+  MaintenanceGate gate;
+  ASSERT_TRUE(gate.request(kGeneration, true));
+  gate.observeFinalCommand(brakeCommand());
+
+  gate.observeCommandStatus(commandStatus(1u));
+
+  EXPECT_TRUE(gate.snapshot().brake_acknowledged);
+  EXPECT_FALSE(gate.snapshot().ready);
+  gate.observeHardware(hardware(1u));
+  gate.observeHardware(hardware(2u));
+  EXPECT_TRUE(gate.snapshot().ready);
+}
+
+// 测试目的：验证 MaintenanceGate.IgnoresPreAckZerosAndDuplicateFrameSequence 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, IgnoresPreAckZerosAndDuplicateFrameSequence) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -157,6 +182,7 @@ TEST(MaintenanceGate, IgnoresPreAckZerosAndDuplicateFrameSequence) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.RejectedBrakeStaysFailedClosed 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RejectedBrakeStaysFailedClosed) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -170,6 +196,7 @@ TEST(MaintenanceGate, RejectedBrakeStaysFailedClosed) {
   EXPECT_FALSE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.TerminalStatusBeforeFinalBrakeStaysFailedClosed 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, TerminalStatusBeforeFinalBrakeStaysFailedClosed) {
   const std::pair<std::uint8_t, std::string> terminal_states[] = {
     {3u, "BRAKE_REJECTED"},
@@ -193,6 +220,7 @@ TEST(MaintenanceGate, TerminalStatusBeforeFinalBrakeStaysFailedClosed) {
   }
 }
 
+// 测试目的：验证 MaintenanceGate.MismatchedTerminalBeforeFinalBrakeIsIgnored 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, MismatchedTerminalBeforeFinalBrakeIsIgnored) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -203,6 +231,7 @@ TEST(MaintenanceGate, MismatchedTerminalBeforeFinalBrakeIsIgnored) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.AckBeforeFinalIsCorrelatedAndDuplicateAckIsIdempotent 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, AckBeforeFinalIsCorrelatedAndDuplicateAckIsIdempotent) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -217,6 +246,7 @@ TEST(MaintenanceGate, AckBeforeFinalIsCorrelatedAndDuplicateAckIsIdempotent) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.WrongCommandStatusDoesNotConfirmCurrentFinal 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, WrongCommandStatusDoesNotConfirmCurrentFinal) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -232,6 +262,7 @@ TEST(MaintenanceGate, WrongCommandStatusDoesNotConfirmCurrentFinal) {
   EXPECT_TRUE(gate.snapshot().brake_acknowledged);
 }
 
+// 测试目的：验证 MaintenanceGate.NewFinalCommandClearsOldAckAndHardwareEvidence 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, NewFinalCommandClearsOldAckAndHardwareEvidence) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -256,6 +287,7 @@ TEST(MaintenanceGate, NewFinalCommandClearsOldAckAndHardwareEvidence) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.TerminalStatusUsesCommandIdAndOverridesAck 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, TerminalStatusUsesCommandIdAndOverridesAck) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -281,6 +313,7 @@ TEST(MaintenanceGate, TerminalStatusUsesCommandIdAndOverridesAck) {
   EXPECT_FALSE(other.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.PendingCommandStatusOverflowFailsClosed 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, PendingCommandStatusOverflowFailsClosed) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -306,6 +339,7 @@ TEST(MaintenanceGate, PendingCommandStatusOverflowFailsClosed) {
   EXPECT_FALSE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.ReplayedPreAckSequenceDoesNotCountAfterAck 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, ReplayedPreAckSequenceDoesNotCountAfterAck) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -320,6 +354,7 @@ TEST(MaintenanceGate, ReplayedPreAckSequenceDoesNotCountAfterAck) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.PublisherEpochChangeRequiresTwoNewZeroFrames 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, PublisherEpochChangeRequiresTwoNewZeroFrames) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -350,6 +385,7 @@ TEST(MaintenanceGate, PublisherEpochChangeRequiresTwoNewZeroFrames) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.RetiredPublisherEpochCannotOverrideCurrentBlocker 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RetiredPublisherEpochCannotOverrideCurrentBlocker) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -376,6 +412,7 @@ TEST(MaintenanceGate, RetiredPublisherEpochCannotOverrideCurrentBlocker) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.EpochZeroAndRetiredEpochCannotRestoreReadiness 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, EpochZeroAndRetiredEpochCannotRestoreReadiness) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -399,6 +436,7 @@ TEST(MaintenanceGate, EpochZeroAndRetiredEpochCannotRestoreReadiness) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.PublisherEpochMaximumDoesNotWrapToOlderSession 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, PublisherEpochMaximumDoesNotWrapToOlderSession) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -426,6 +464,7 @@ TEST(MaintenanceGate, PublisherEpochMaximumDoesNotWrapToOlderSession) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.BadLatestHardwareRequiresTwoNewZeroFrames 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, BadLatestHardwareRequiresTwoNewZeroFrames) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -449,6 +488,7 @@ TEST(MaintenanceGate, BadLatestHardwareRequiresTwoNewZeroFrames) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.MissionBusyAndMismatchedReleaseFailClosed 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, MissionBusyAndMismatchedReleaseFailClosed) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, false));
@@ -466,6 +506,7 @@ TEST(MaintenanceGate, MissionBusyAndMismatchedReleaseFailClosed) {
   EXPECT_EQ(gate.snapshot().phase, "INACTIVE");
 }
 
+// 测试目的：验证 MaintenanceGate.GenerationMustIncreaseAndOldEvidenceIsIgnored 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, GenerationMustIncreaseAndOldEvidenceIsIgnored) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -501,6 +542,7 @@ TEST(MaintenanceGate, GenerationMustIncreaseAndOldEvidenceIsIgnored) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.RestoresInactivePersistentStateWithoutActivatingGate 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RestoresInactivePersistentStateWithoutActivatingGate) {
   MaintenanceGate gate;
 
@@ -520,6 +562,7 @@ TEST(MaintenanceGate, RestoresInactivePersistentStateWithoutActivatingGate) {
   EXPECT_TRUE(gate.request(kGeneration + 1u, true));
 }
 
+// 测试目的：验证 MaintenanceGate.RestoresActivePersistentStateWithoutReadinessEvidence 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RestoresActivePersistentStateWithoutReadinessEvidence) {
   MaintenanceGate gate;
 
@@ -547,6 +590,7 @@ TEST(MaintenanceGate, RestoresActivePersistentStateWithoutReadinessEvidence) {
   EXPECT_TRUE(gate.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceGate.RejectsInvalidPersistentStateWithoutMutation 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RejectsInvalidPersistentStateWithoutMutation) {
   MaintenanceGate gate;
   const auto before = gate.snapshot();
@@ -563,6 +607,7 @@ TEST(MaintenanceGate, RejectsInvalidPersistentStateWithoutMutation) {
   EXPECT_TRUE(gate.restorePersistentState(kGeneration, false));
 }
 
+// 测试目的：验证 MaintenanceGate.RejectsPersistentRestoreAfterGateIsNoLongerPristine 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RejectsPersistentRestoreAfterGateIsNoLongerPristine) {
   MaintenanceGate gate;
   ASSERT_TRUE(gate.request(kGeneration, true));
@@ -590,6 +635,7 @@ TEST(MaintenanceGate, RejectsPersistentRestoreAfterGateIsNoLongerPristine) {
   EXPECT_FALSE(restored_empty.snapshot().gate_active);
 }
 
+// 测试目的：验证 MaintenanceGate.MissionIdleMutationMakesGateNonPristine 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, MissionIdleMutationMakesGateNonPristine) {
   MaintenanceGate gate;
   gate.setMissionIdle(true);
@@ -602,6 +648,7 @@ TEST(MaintenanceGate, MissionIdleMutationMakesGateNonPristine) {
   expectSnapshotsEqual(after, before);
 }
 
+// 测试目的：验证 MaintenanceGate.RestoredMaximumGenerationPreventsFutureRequests 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, RestoredMaximumGenerationPreventsFutureRequests) {
   MaintenanceGate gate;
   constexpr std::uint64_t maximum =
@@ -616,6 +663,7 @@ TEST(MaintenanceGate, RestoredMaximumGenerationPreventsFutureRequests) {
   EXPECT_EQ(gate.snapshot().generation, 0u);
 }
 
+// 测试目的：验证 MaintenanceGate.MaximumGenerationIsNaturalFailClosedBoundary 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGate, MaximumGenerationIsNaturalFailClosedBoundary) {
   MaintenanceGate gate;
   constexpr std::uint64_t maximum =

@@ -1,3 +1,4 @@
+# 文件作用：定义进入或退出维护模式并返回安全门状态的服务接口。
 bool enable
 uint64 generation
 string requester

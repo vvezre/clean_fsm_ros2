@@ -1,3 +1,4 @@
+# 文件作用：验证 gateway package contract 相关契约、运行逻辑和边界条件。
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -9,6 +10,7 @@ PACKAGE = SRC / "cleanbot_gateway"
 
 
 class GatewayPackageContractTest(unittest.TestCase):
+    # 测试作用：验证“package_contains_mqtt_gateway_core_node_and_tests”场景的契约、输出结果和边界行为。
     def test_package_contains_mqtt_gateway_core_node_and_tests(self):
         required = (
             "package.xml",
@@ -24,6 +26,7 @@ class GatewayPackageContractTest(unittest.TestCase):
         missing = [item for item in required if not (PACKAGE / item).is_file()]
         self.assertEqual(missing, [])
 
+    # 测试作用：验证“package_uses_ros_config_paho_and_structured_json”场景的契约、输出结果和边界行为。
     def test_package_uses_ros_config_paho_and_structured_json(self):
         root = ET.parse(str(PACKAGE / "package.xml")).getroot()
         self.assertEqual(root.findtext("name"), "cleanbot_gateway")
@@ -52,6 +55,7 @@ class GatewayPackageContractTest(unittest.TestCase):
         ):
             self.assertIn(token, cmake)
 
+    # 测试作用：验证“gateway_preserves_cloud_topics_and_command_results”场景的契约、输出结果和边界行为。
     def test_gateway_preserves_cloud_topics_and_command_results(self):
         source = (PACKAGE / "src/cloud_gateway_node.cpp").read_text(encoding="utf-8")
         codec = (PACKAGE / "src/cloud_message_codec.cpp").read_text(encoding="utf-8")
@@ -75,6 +79,7 @@ class GatewayPackageContractTest(unittest.TestCase):
         ):
             self.assertIn(token, codec)
 
+    # 测试作用：验证“gateway_has_stale_and_retained_joystick_guards”场景的契约、输出结果和边界行为。
     def test_gateway_has_stale_and_retained_joystick_guards(self):
         core = (PACKAGE / "src/cloud_command.cpp").read_text(encoding="utf-8")
         for token in (
@@ -87,6 +92,7 @@ class GatewayPackageContractTest(unittest.TestCase):
         ):
             self.assertIn(token, core)
 
+    # 测试作用：验证“gateway_configuration_remains_available_but_is_not_started_by_default”场景的契约、输出结果和边界行为。
     def test_gateway_configuration_remains_available_but_is_not_started_by_default(self):
         registry = (
             SRC / "cleanbot_config/src/config_registry.cpp"
@@ -117,6 +123,7 @@ class GatewayPackageContractTest(unittest.TestCase):
         self.assertNotIn('executable="cloud_gateway_node"', launch)
         self.assertNotIn("<exec_depend>cleanbot_gateway</exec_depend>", bringup_package)
 
+    # 测试作用：验证“manual_speed_is_immediate_and_sqlite_is_not_accessed_directly”场景的契约、输出结果和边界行为。
     def test_manual_speed_is_immediate_and_sqlite_is_not_accessed_directly(self):
         registry = (
             SRC / "cleanbot_config/src/config_registry.cpp"

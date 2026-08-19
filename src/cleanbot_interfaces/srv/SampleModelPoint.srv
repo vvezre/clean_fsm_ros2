@@ -1,3 +1,4 @@
+# 文件作用：定义采集一枚 RTK 模型点的服务接口。
 string model_id
 string group_id
 string capture_type

@@ -1,3 +1,4 @@
+# 文件作用：定义连接两个建模子区域的通行段消息。
 string id
 string type
 string start_point_id

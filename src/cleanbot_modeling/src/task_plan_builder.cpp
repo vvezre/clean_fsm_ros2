@@ -1,3 +1,7 @@
+/*
+ * 文件作用：任务计划构建实现：把几何区域转换为可执行任务段。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_modeling/task_plan_builder.hpp"
 
 #include <algorithm>
@@ -22,6 +26,7 @@ constexpr std::uint8_t kPlanSegmentCleaning = 1u;
 constexpr std::uint8_t kPlanSegmentTransfer = 2u;
 constexpr double kPlanPointEpsilonCm = 1e-5;
 
+// 构造任务计划生成失败结果和稳定错误码。
 TaskPlanResult plan_failure(
     const std::string& code,
     const std::string& message) {
@@ -31,21 +36,25 @@ TaskPlanResult plan_failure(
   return result;
 }
 
+// 按点标识在区域组中查找模型点。
 const ModelPoint* find_point(
     const ModelGroup& group,
     const std::string& point_id) {
   const auto found = std::find_if(
       group.points.begin(), group.points.end(),
+      // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
       [&point_id](const ModelPoint& point) {
         return point.id == point_id;
       });
   return found == group.points.end() ? nullptr : &(*found);
 }
 
+// 在计划拼接容差内判断两个局部坐标是否相同。
 bool same_plan_point(const Point2d& left, const Point2d& right) {
   return point_distance_cm(left, right) <= kPlanPointEpsilonCm;
 }
 
+// 根据区域边界主方向自动选择覆盖扫掠角。
 double automatic_sweep_angle(
     const ModelGroup& group,
     const ModelSubArea& area) {
@@ -64,12 +73,14 @@ double automatic_sweep_angle(
       90.0);
 }
 
+// 查找连接指定两个子区域的已确认连接段。
 const ModelConnector* find_connector(
     const ModelGroup& group,
     const std::string& from_sub_area_id,
     const std::string& to_sub_area_id) {
   const auto found = std::find_if(
       group.connectors.begin(), group.connectors.end(),
+      // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
       [&from_sub_area_id, &to_sub_area_id](const ModelConnector& connector) {
         return connector.from_sub_area_id == from_sub_area_id &&
             connector.to_sub_area_id == to_sub_area_id;
@@ -77,6 +88,7 @@ const ModelConnector* find_connector(
   return found == group.connectors.end() ? nullptr : &(*found);
 }
 
+// 根据连接关系确定所有子区域的可连续访问顺序。
 bool resolve_sub_area_chain(
     const ModelGroup& group,
     std::vector<std::size_t>& ordered_indexes,
@@ -168,6 +180,7 @@ bool resolve_sub_area_chain(
   return true;
 }
 
+// 从模型显式原点或有效采集点确定地理坐标原点。
 bool find_origin(
     const CleaningModel& model,
     ModelPoint& origin) {
@@ -184,6 +197,7 @@ bool find_origin(
   return true;
 }
 
+// 将计划段局部坐标转换并填充起终点经纬度。
 void fill_geo(
     PlanSegment& segment,
     const ModelPoint& origin) {
@@ -204,6 +218,7 @@ void fill_geo(
       segment.end_lon);
 }
 
+// 构造带索引、类型、速度和几何信息的基础计划段。
 PlanSegment make_segment(
     const std::uint8_t type,
     const std::string& group_id,
@@ -235,6 +250,7 @@ PlanSegment make_segment(
   return segment;
 }
 
+// 将影响计划内容的字段序列化为稳定指纹文本。
 std::string plan_fingerprint(const CleaningPlan& plan) {
   std::ostringstream stream;
   stream << std::fixed << std::setprecision(8)
@@ -254,6 +270,7 @@ std::string plan_fingerprint(const CleaningPlan& plan) {
   return stream.str();
 }
 
+// 使用 FNV-1a 计算计划指纹的十六进制哈希。
 std::string fnv1a_hex(const std::string& value) {
   std::uint64_t hash = 1469598103934665603ull;
   for (const unsigned char character : value) {
@@ -269,6 +286,7 @@ std::string fnv1a_hex(const std::string& value) {
 
 using namespace task_plan_builder_detail;
 
+// 校验正式模型，生成转场、连接和清扫段并计算计划摘要。
 TaskPlanResult build_task_plan(
     const CleaningModel& model,
     const double brush_width_cm,

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 文件作用：加载 ROS2 Humble 环境并使用 colcon 构建 Cleanbot 工作区。
 set -euo pipefail
 
 if [[ ! -f /opt/ros/humble/setup.bash ]]; then

@@ -1,3 +1,7 @@
+/*
+ * 文件作用：使用 JSON 状态文件、跨平台文件锁和原子替换持久化维护模式。
+ * 说明：同时防御符号链接、Windows 重解析点、路径替换和异常中断造成的状态损坏。
+ */
 #if defined(_WIN32) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
@@ -49,6 +53,7 @@ static_assert(noexcept(
     std::declval<std::string&>().swap(
         std::declval<std::string&>())));
 
+// 统一构造维护存储操作结果，并携带可选记录和提交状态。
 MaintenanceStoreResult make_result(
     const MaintenanceStoreCode code,
     std::string message,
@@ -62,6 +67,7 @@ MaintenanceStoreResult make_result(
   return result;
 }
 
+// 检查 JSON 对象是否只包含指定字段，拒绝未知或缺失字段。
 bool has_exact_fields(
     const Json& value,
     const std::initializer_list<const char*> fields) {
@@ -76,6 +82,7 @@ bool has_exact_fields(
   return true;
 }
 
+// 解析并严格校验维护状态 JSON、架构版本和代次不变式。
 MaintenanceStoreResult parse_record(const std::string& bytes) {
   if (bytes.empty()) {
     return make_result(
@@ -179,6 +186,7 @@ MaintenanceStoreResult parse_record(const std::string& bytes) {
       std::move(record));
 }
 
+// 将内存记录序列化为稳定、换行结尾的 JSON 文本。
 std::string serialize_record(const MaintenanceStoreRecord& record) {
   Json root{
       {"schemaVersion", kSchemaVersion},
@@ -198,6 +206,7 @@ std::string serialize_record(const MaintenanceStoreRecord& record) {
 
 #if defined(_WIN32)
 
+// 将 Windows 错误码附加到可读的操作说明中。
 std::string windows_error(
     const std::string& prefix,
     const DWORD error = ::GetLastError()) {
@@ -218,6 +227,7 @@ struct DirectoryAnchor {
   WindowsFileIdentity identity;
 };
 
+// 比较两个 Windows 文件标识是否指向同一卷上的同一对象。
 bool same_identity(
     const WindowsFileIdentity& lhs,
     const WindowsFileIdentity& rhs) noexcept {
@@ -226,6 +236,7 @@ bool same_identity(
       lhs.file_index_low == rhs.file_index_low;
 }
 
+// 验证句柄指向普通目录而非重解析点，并提取稳定文件标识。
 bool inspect_directory(
     const HANDLE handle,
     WindowsFileIdentity* identity) noexcept {
@@ -243,11 +254,13 @@ bool inspect_directory(
   return true;
 }
 
+// 判断字符是否为本地盘符允许的 ASCII 英文字母。
 bool ascii_drive_letter(const wchar_t value) noexcept {
   return (value >= L'A' && value <= L'Z') ||
       (value >= L'a' && value <= L'z');
 }
 
+// 判断路径分量是否命中 Windows 保留设备名称。
 bool reserved_windows_component(const std::wstring& component) {
   const auto separator = component.find(L'.');
   std::wstring stem = component.substr(0u, separator);
@@ -255,6 +268,7 @@ bool reserved_windows_component(const std::wstring& component) {
       stem.begin(),
       stem.end(),
       stem.begin(),
+      // 匿名函数作用：封装当前局部回调或判定逻辑，供调用方在本作用域内执行。
       [](const wchar_t value) {
         return value >= L'a' && value <= L'z'
                ? static_cast<wchar_t>(value - L'a' + L'A')
@@ -274,6 +288,7 @@ bool reserved_windows_component(const std::wstring& component) {
   return false;
 }
 
+// 校验单个 Windows 路径分量不含保留名称、控制字符或非法字符。
 bool safe_windows_component(
     const std::filesystem::path& component) {
   const std::wstring name = component.wstring();
@@ -292,6 +307,7 @@ bool safe_windows_component(
   return true;
 }
 
+// 仅接受带本地盘符的绝对路径，并逐级校验所有路径分量。
 bool safe_local_windows_path(
     const std::filesystem::path& path) {
   if (!path.is_absolute() || !path.has_root_name() ||
@@ -314,16 +330,23 @@ bool safe_local_windows_path(
 
 class LockedStore {
  public:
+  // 创建尚未绑定路径和文件锁的存储会话。
   LockedStore() = default;
+  // 文件锁会话绑定操作系统句柄，禁止复制。
   LockedStore(const LockedStore&) = delete;
+  // 禁止复制赋值，避免两个对象重复释放同一锁。
   LockedStore& operator=(const LockedStore&) = delete;
+  // 禁止移动构造，保证已锚定句柄地址和生命周期稳定。
   LockedStore(LockedStore&&) = delete;
+  // 禁止移动赋值，防止锁所有权发生隐式转移。
   LockedStore& operator=(LockedStore&&) = delete;
 
+  // 析构时以不抛异常方式释放锁、文件句柄和目录锚点。
   ~LockedStore() {
     close_unchecked();
   }
 
+  // 校验 Windows 路径、锚定父目录链并独占锁定守卫文件。
   MaintenanceStoreResult open(
       const std::filesystem::path& requested_path) {
     if (!safe_local_windows_path(requested_path)) {
@@ -389,6 +412,7 @@ class LockedStore {
         "maintenance guard locked");
   }
 
+  // 显式解锁并关闭句柄；关闭失败会覆盖为 I/O 错误结果。
   void finish(
       MaintenanceStoreResult* result,
       std::string* prepared_error_message) noexcept {
@@ -425,10 +449,12 @@ class LockedStore {
     }
   }
 
+  // 返回经过规范化并受目录锚点保护的状态文件路径。
   const std::filesystem::path& state_path() const {
     return state_path_;
   }
 
+  // 重新打开父目录并比对文件标识，检测路径被替换的情况。
   bool validate_parent_anchor() const noexcept {
     if (directory_anchors_.empty()) {
       return false;
@@ -455,6 +481,7 @@ class LockedStore {
   }
 
  private:
+  // 从盘符根目录开始逐级锚定状态文件父目录链。
   MaintenanceStoreResult anchor_directory_chain() {
     std::filesystem::path anchored_path = state_path_.root_path();
     auto anchored = anchor_directory(anchored_path);
@@ -473,6 +500,7 @@ class LockedStore {
         "Windows maintenance directory chain anchored");
   }
 
+  // 打开并保存一个非重解析点目录的句柄和稳定身份。
   MaintenanceStoreResult anchor_directory(
       const std::filesystem::path& directory_path) {
     const HANDLE handle = ::CreateFileW(
@@ -508,6 +536,7 @@ class LockedStore {
         "Windows maintenance directory anchored");
   }
 
+  // 在析构路径中尽力释放全部 Windows 资源，不传播错误。
   void close_unchecked() noexcept {
     if (locked_) {
       OVERLAPPED overlapped {};
@@ -537,6 +566,7 @@ class LockedStore {
   bool locked_{false};
 };
 
+// 在 Windows 守卫锁内读取有界普通文件并解析维护记录。
 MaintenanceStoreResult read_locked(const LockedStore& store) {
   if (!store.validate_parent_anchor()) {
     return make_result(
@@ -612,6 +642,7 @@ MaintenanceStoreResult read_locked(const LockedStore& store) {
   return parse_record(bytes);
 }
 
+// 在 Windows 守卫锁内写临时文件、同步并原子替换正式状态文件。
 MaintenanceStoreResult write_locked(
     const LockedStore& store,
     const MaintenanceStoreRecord& record) {
@@ -717,18 +748,20 @@ MaintenanceStoreResult write_locked(
         MaintenanceStoreCode::kIoError,
         windows_error("failed to replace maintenance state", error));
   }
-  // Windows maintenance state commit point.
+  // Windows maintenance state commit point. 中文说明：原子替换成功后不得再报告“未提交”。
   return std::move(committed_success);
 }
 
 #else
 
+// 将当前或指定 errno 转换为带操作前缀的错误说明。
 std::string posix_error(
     const std::string& prefix,
     const int error = errno) {
   return prefix + ": " + std::strerror(error);
 }
 
+// 关闭 POSIX 文件描述符，并把关闭失败的 errno 返回给调用方。
 bool close_descriptor(const int descriptor, int* error) noexcept {
   if (::close(descriptor) == 0) {
     return true;
@@ -739,16 +772,23 @@ bool close_descriptor(const int descriptor, int* error) noexcept {
 
 class LockedStore {
  public:
+  // 创建尚未打开目录和守卫文件的存储会话。
   LockedStore() = default;
+  // 文件描述符和 flock 锁只能由单个对象持有，禁止复制。
   LockedStore(const LockedStore&) = delete;
+  // 禁止复制赋值，避免重复关闭同一描述符。
   LockedStore& operator=(const LockedStore&) = delete;
+  // 禁止移动构造，保持文件锁所有者生命周期固定。
   LockedStore(LockedStore&&) = delete;
+  // 禁止移动赋值，防止锁所有权被隐式覆盖。
   LockedStore& operator=(LockedStore&&) = delete;
 
+  // 析构时尽力解锁并关闭守卫文件和父目录描述符。
   ~LockedStore() {
     close_unchecked();
   }
 
+  // 使用 O_NOFOLLOW 打开可信父目录和守卫文件，并获取独占 flock 锁。
   MaintenanceStoreResult open(
       const std::filesystem::path& state_path) {
     const auto filename_path = state_path.filename();
@@ -828,6 +868,7 @@ class LockedStore {
         "maintenance guard locked");
   }
 
+  // 显式释放 flock 和描述符，并把首个关闭错误写回结果。
   void finish(
       MaintenanceStoreResult* result,
       std::string* prepared_error_message) noexcept {
@@ -864,15 +905,18 @@ class LockedStore {
     }
   }
 
+  // 返回已验证父目录的文件描述符，供 openat/renameat 使用。
   int directory_fd() const {
     return directory_fd_;
   }
 
+  // 返回相对于可信父目录的状态文件名。
   const std::string& filename() const {
     return filename_;
   }
 
  private:
+  // 在析构路径中忽略错误地释放锁和全部文件描述符。
   void close_unchecked() noexcept {
     if (locked_) {
       while (::flock(guard_fd_, LOCK_UN) != 0 &&
@@ -897,6 +941,7 @@ class LockedStore {
   std::string guard_name_;
 };
 
+// 在 POSIX 守卫锁内拒绝符号链接，读取有界普通文件并解析记录。
 MaintenanceStoreResult read_locked(const LockedStore& store) {
   struct stat path_stat {};
   if (::fstatat(
@@ -1008,6 +1053,7 @@ MaintenanceStoreResult read_locked(const LockedStore& store) {
   return parse_record(bytes);
 }
 
+// 写入唯一临时文件并依次同步文件、原子重命名和同步父目录。
 MaintenanceStoreResult write_locked(
     const LockedStore& store,
     const MaintenanceStoreRecord& record) {
@@ -1056,6 +1102,7 @@ MaintenanceStoreResult write_locked(
         "failed to allocate a unique maintenance temp file");
   }
 
+  // 清理回调作用：删除尚未提交的临时状态文件并返回清理结果。
   const auto cleanup_temporary = [&]() {
     if (::unlinkat(
             store.directory_fd(),
@@ -1067,6 +1114,7 @@ MaintenanceStoreResult write_locked(
     return 0;
   };
   const auto fail_before_commit =
+      // 清理回调作用：删除尚未提交的临时状态文件并返回清理结果。
       [&](const std::string& message) {
         const int cleanup_error = cleanup_temporary();
         if (cleanup_error != 0) {
@@ -1149,7 +1197,7 @@ MaintenanceStoreResult write_locked(
         posix_error("failed to replace maintenance state", error));
   }
 
-  // POSIX maintenance state commit point.
+  // POSIX maintenance state commit point. 中文说明：renameat 成功后记录已对其他进程可见。
   while (::fsync(store.directory_fd()) != 0) {
     if (errno == EINTR) {
       continue;
@@ -1162,6 +1210,7 @@ MaintenanceStoreResult write_locked(
 #endif
 
 template<typename Operation>
+// 在持有跨进程守卫锁期间执行读写操作，并统一完成资源收尾。
 MaintenanceStoreResult with_locked_store(
     const std::filesystem::path& state_path,
     Operation&& operation) {
@@ -1179,6 +1228,7 @@ MaintenanceStoreResult with_locked_store(
 
 MaintenanceStoreResult exception_result(
     const std::exception& exception) noexcept {
+  // 将标准异常安全地转换为不抛异常的 I/O 失败结果。
   try {
     return make_result(
         MaintenanceStoreCode::kIoError,
@@ -1191,6 +1241,7 @@ MaintenanceStoreResult exception_result(
   }
 }
 
+// 将未知异常转换为保守的 I/O 失败结果。
 MaintenanceStoreResult unknown_exception_result() noexcept {
   try {
     return make_result(
@@ -1205,9 +1256,11 @@ MaintenanceStoreResult unknown_exception_result() noexcept {
 
 }  // namespace
 
+// 保存维护状态文件路径，不在构造阶段执行任何文件系统操作。
 MaintenanceStore::MaintenanceStore(std::filesystem::path state_path)
     : state_path_(std::move(state_path)) {}
 
+// 加锁读取并校验当前维护状态，对所有异常返回稳定错误结果。
 MaintenanceStoreResult MaintenanceStore::load() const noexcept {
   try {
     return with_locked_store(
@@ -1222,6 +1275,7 @@ MaintenanceStoreResult MaintenanceStore::load() const noexcept {
   }
 }
 
+// 状态文件缺失时原子创建初始非活动记录，已有合法记录则保持不变。
 MaintenanceStoreResult MaintenanceStore::initializeGenesis() noexcept {
   try {
     return with_locked_store(
@@ -1247,6 +1301,7 @@ MaintenanceStoreResult MaintenanceStore::initializeGenesis() noexcept {
   }
 }
 
+// 校验申请者和理由，递增代次并原子写入活动维护抑制器。
 MaintenanceStoreResult MaintenanceStore::activate(
     const std::string& requester,
     const std::string& reason) noexcept {
@@ -1265,6 +1320,7 @@ MaintenanceStoreResult MaintenanceStore::activate(
 
     return with_locked_store(
         state_path_,
+        // 存储操作回调作用：在持有跨进程文件锁期间执行本次状态读写事务。
         [&](const LockedStore& store) {
           auto current = read_locked(store);
           if (current.code != MaintenanceStoreCode::kOk) {
@@ -1307,6 +1363,7 @@ MaintenanceStoreResult MaintenanceStore::activate(
   }
 }
 
+// 仅在代次和申请者均匹配时清除维护抑制器并持久化。
 MaintenanceStoreResult MaintenanceStore::release(
     const std::uint64_t generation,
     const std::string& requester) noexcept {
@@ -1320,6 +1377,7 @@ MaintenanceStoreResult MaintenanceStore::release(
 
     return with_locked_store(
         state_path_,
+        // 存储操作回调作用：在持有跨进程文件锁期间执行本次状态读写事务。
         [&](const LockedStore& store) {
           auto current = read_locked(store);
           if (current.code != MaintenanceStoreCode::kOk) {

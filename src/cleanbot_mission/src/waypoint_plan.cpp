@@ -1,3 +1,7 @@
+/*
+ * 文件作用：航点计划实现：校验、整理和遍历任务航点序列。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_mission/waypoint_plan.hpp"
 
 #include <cmath>
@@ -9,6 +13,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kSamePointToleranceDeg = 1e-12;
 
+// 将任意航向角归一化到零至三百六十度范围。
 double normalize_heading_deg(const double heading) {
   double normalized = std::fmod(heading, 360.0);
   if (normalized < 0.0) {
@@ -19,6 +24,7 @@ double normalize_heading_deg(const double heading) {
 
 }  // namespace
 
+// 校验航点数量与循环规则，并初始化序列遍历状态。
 WaypointSequence::WaypointSequence(
     const std::size_t waypoint_count,
     const bool loop,
@@ -33,14 +39,17 @@ WaypointSequence::WaypointSequence(
   }
 }
 
+// 返回航点序列参数是否满足执行要求。
 bool WaypointSequence::valid() const {
   return error_code_.empty();
 }
 
+// 返回序列初始化失败时的稳定业务错误码。
 const std::string& WaypointSequence::error_code() const {
   return error_code_;
 }
 
+// 按单次或闭环顺序生成下一个目标航点及完成循环数。
 bool WaypointSequence::next(WaypointTarget& target) {
   if (!valid()) {
     return false;
@@ -79,11 +88,13 @@ bool WaypointSequence::next(WaypointTarget& target) {
   return true;
 }
 
+// 校验航点经纬度是否为有限值且位于合法范围内。
 bool validate_waypoint(const double lat, const double lon) {
   return std::isfinite(lat) && std::isfinite(lon) &&
       lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0;
 }
 
+// 使用局部近似计算起点指向终点的地理航向角。
 double calculate_heading_deg(
     const double start_lat,
     const double start_lon,
@@ -102,6 +113,7 @@ double calculate_heading_deg(
   return normalize_heading_deg(std::atan2(east, north) * 180.0 / kPi);
 }
 
+// 将目标航向相对当前航向的转角归一化为最短有符号角。
 double normalize_turn_angle_deg(
     const double target_heading,
     const double current_heading) {
@@ -112,6 +124,7 @@ double normalize_turn_angle_deg(
   return delta - 180.0;
 }
 
+// 根据起终点和当前航向构造直线航点段及所需转角。
 WaypointSegmentPlan build_waypoint_segment(
     const double start_lat,
     const double start_lon,

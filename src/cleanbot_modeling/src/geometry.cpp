@@ -1,3 +1,7 @@
+/*
+ * 文件作用：几何工具实现：提供点、线段、多边形和角度计算。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include "cleanbot_modeling/geometry.hpp"
 
 #include <cmath>
@@ -10,6 +14,7 @@ constexpr double kGeometryEarthRadiusM = 6371000.0;
 constexpr double kGeometryPi = 3.14159265358979323846;
 constexpr double kGeometryEpsilon = 1e-9;
 
+// 计算三点有向面积，用于判断转向方向和共线关系。
 double geometry_orientation(
     const Point2d& a,
     const Point2d& b,
@@ -18,6 +23,7 @@ double geometry_orientation(
       (b.y_cm - a.y_cm) * (c.x_cm - a.x_cm);
 }
 
+// 判断共线点是否位于线段包围范围内。
 bool geometry_on_segment(
     const Point2d& a,
     const Point2d& b,
@@ -29,6 +35,7 @@ bool geometry_on_segment(
       std::abs(geometry_orientation(a, b, point)) <= kGeometryEpsilon;
 }
 
+// 使用方向测试和共线特例判断两条线段是否相交。
 bool geometry_segments_intersect(
     const Point2d& a,
     const Point2d& b,
@@ -59,6 +66,7 @@ bool geometry_segments_intersect(
 
 using namespace geometry_detail;
 
+// 将经纬度投影到以指定原点为基准的局部厘米坐标。
 Point2d lat_lon_to_local_cm(
     const double origin_lat,
     const double origin_lon,
@@ -76,6 +84,7 @@ Point2d lat_lon_to_local_cm(
   return point;
 }
 
+// 必要时建立模型原点，并为采集点写入统一局部坐标。
 bool set_model_point_local_coordinates(
     CleaningModel& model,
     ModelPoint& point) {
@@ -99,6 +108,7 @@ bool set_model_point_local_coordinates(
   return true;
 }
 
+// 将局部厘米坐标反投影为经纬度。
 void local_cm_to_lat_lon(
     const double origin_lat,
     const double origin_lon,
@@ -117,6 +127,7 @@ void local_cm_to_lat_lon(
       180.0 / kGeometryPi;
 }
 
+// 校验多边形点数、有限性、非零面积和边界无自交。
 bool is_simple_polygon(const std::vector<Point2d>& polygon) {
   if (polygon.size() < 3u) {
     return false;
@@ -153,10 +164,12 @@ bool is_simple_polygon(const std::vector<Point2d>& polygon) {
   return true;
 }
 
+// 计算两个局部坐标点之间的欧氏距离（厘米）。
 double point_distance_cm(const Point2d& start, const Point2d& end) {
   return std::hypot(end.x_cm - start.x_cm, end.y_cm - start.y_cm);
 }
 
+// 将任意航向角归一化到零至三百六十度范围。
 double normalize_heading_deg(const double heading_deg) {
   double normalized = std::fmod(heading_deg, 360.0);
   if (normalized < 0.0) {
@@ -165,12 +178,14 @@ double normalize_heading_deg(const double heading_deg) {
   return normalized;
 }
 
+// 计算局部平面中起点指向终点的航向角。
 double heading_from_points_deg(const Point2d& start, const Point2d& end) {
   return normalize_heading_deg(
       std::atan2(end.x_cm - start.x_cm, end.y_cm - start.y_cm) *
       180.0 / kGeometryPi);
 }
 
+// 将目标航向相对当前航向的转角归一化为最短有符号角。
 double normalize_turn_deg(
     const double target_heading_deg,
     const double current_heading_deg) {

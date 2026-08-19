@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include "cleanbot_mission/maintenance_runtime.hpp"
 #include "cleanbot_common/publisher_epoch_tracker.hpp"
 
@@ -21,6 +22,7 @@ namespace {
 
 class TemporaryDirectory {
  public:
+  // 为单个测试创建名称唯一的临时目录，隔离维护状态文件。
   TemporaryDirectory() {
     static std::atomic<std::uint64_t> sequence{0u};
     const auto nonce =
@@ -31,6 +33,7 @@ class TemporaryDirectory {
     std::filesystem::create_directory(path_);
   }
 
+  // 测试结束时恢复目录权限并递归清理临时数据。
   ~TemporaryDirectory() {
     std::error_code ignored;
     std::filesystem::permissions(
@@ -50,6 +53,7 @@ class TemporaryDirectory {
     std::filesystem::remove_all(path_, ignored);
   }
 
+// 辅助函数作用：为测试场景提供 path 所需的准备、执行或清理逻辑。
   const std::filesystem::path& path() const {
     return path_;
   }
@@ -58,6 +62,7 @@ class TemporaryDirectory {
   std::filesystem::path path_;
 };
 
+// 辅助函数作用：为测试场景提供 write_bytes 所需的准备、执行或清理逻辑。
 void write_bytes(
     const std::filesystem::path& path,
     const std::string& bytes) {
@@ -67,6 +72,7 @@ void write_bytes(
   ASSERT_TRUE(output.good());
 }
 
+// 辅助函数作用：为测试场景提供 read_bytes 所需的准备、执行或清理逻辑。
 std::string read_bytes(const std::filesystem::path& path) {
   std::ifstream input(path, std::ios::binary);
   return std::string(
@@ -74,12 +80,14 @@ std::string read_bytes(const std::filesystem::path& path) {
       std::istreambuf_iterator<char>());
 }
 
+// 辅助函数作用：为测试场景提供 inactive_json 所需的准备、执行或清理逻辑。
 std::string inactive_json(const std::uint64_t generation) {
   return "{\"schemaVersion\":1,\"lastGeneration\":" +
       std::to_string(generation) +
       ",\"state\":\"inactive\",\"inhibitor\":null}\n";
 }
 
+// 辅助函数作用：为测试场景提供 active_json 所需的准备、执行或清理逻辑。
 std::string active_json(
     const std::uint64_t generation,
     const std::string& requester,
@@ -118,6 +126,7 @@ static_assert(noexcept(
 static_assert(noexcept(
     std::declval<const MaintenanceRuntime&>().lastGeneration()));
 
+// 测试目的：验证 MaintenanceRuntimeTest.StartsFailClosedBeforeInitialization 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, StartsFailClosedBeforeInitialization) {
   TemporaryDirectory temporary;
   MaintenanceRuntime runtime(temporary.path() / "maintenance.json");
@@ -131,6 +140,7 @@ TEST(MaintenanceRuntimeTest, StartsFailClosedBeforeInitialization) {
   EXPECT_EQ(snapshot.blocker_code, "MAINTENANCE_NOT_INITIALIZED");
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.RestoresInactiveRecordAndOpensAdmission 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, RestoresInactiveRecordAndOpensAdmission) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -153,6 +163,7 @@ TEST(MaintenanceRuntimeTest, RestoresInactiveRecordAndOpensAdmission) {
   EXPECT_EQ(snapshot.phase, "INACTIVE");
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.RestoresExactActiveOwnerWithoutEvidence 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, RestoresExactActiveOwnerWithoutEvidence) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -177,6 +188,7 @@ TEST(MaintenanceRuntimeTest, RestoresExactActiveOwnerWithoutEvidence) {
   EXPECT_EQ(snapshot.phase, "MISSION_BUSY");
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.MissingInvalidAndUnsupportedRecordsLatchFault 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, MissingInvalidAndUnsupportedRecordsLatchFault) {
   const std::string invalid =
       "{\"schemaVersion\":1,\"lastGeneration\":2,\"state\":\"active\","
@@ -210,6 +222,7 @@ TEST(MaintenanceRuntimeTest, MissingInvalidAndUnsupportedRecordsLatchFault) {
 }
 
 #if !defined(_WIN32)
+// 测试目的：验证 MaintenanceRuntimeTest.IoFailureLatchesFaultWithoutRepair 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, IoFailureLatchesFaultWithoutRepair) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -233,6 +246,7 @@ TEST(MaintenanceRuntimeTest, IoFailureLatchesFaultWithoutRepair) {
 }
 #endif
 
+// 测试目的：验证 MaintenanceRuntimeTest.SecondInitializeDoesNotRereadOrMutate 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, SecondInitializeDoesNotRereadOrMutate) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -252,6 +266,7 @@ TEST(MaintenanceRuntimeTest, SecondInitializeDoesNotRereadOrMutate) {
   EXPECT_EQ(after.admission_closed, before.admission_closed);
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.MissionIdleUpdatesHealthyRestoredGateCoherently 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, MissionIdleUpdatesHealthyRestoredGateCoherently) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -275,6 +290,7 @@ TEST(MaintenanceRuntimeTest, MissionIdleUpdatesHealthyRestoredGateCoherently) {
   EXPECT_EQ(busy.phase, "MISSION_BUSY");
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.GateRestoreFailureLatchesStoreFault 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, GateRestoreFailureLatchesStoreFault) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -291,6 +307,7 @@ TEST(MaintenanceRuntimeTest, GateRestoreFailureLatchesStoreFault) {
       "MAINTENANCE_STORE_FAULT");
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.EnablePersistsNewGenerationAndClosesAdmission 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, EnablePersistsNewGenerationAndClosesAdmission) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -320,6 +337,7 @@ TEST(MaintenanceRuntimeTest, EnablePersistsNewGenerationAndClosesAdmission) {
       std::string::npos);
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.SameOwnerEnableIsIdempotentAndKeepsOriginalReason 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, SameOwnerEnableIsIdempotentAndKeepsOriginalReason) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -339,6 +357,7 @@ TEST(MaintenanceRuntimeTest, SameOwnerEnableIsIdempotentAndKeepsOriginalReason) 
   EXPECT_EQ(read_bytes(state_path), before);
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.ExactReleasePersistsTombstoneBeforeOpeningAdmission 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, ExactReleasePersistsTombstoneBeforeOpeningAdmission) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -368,6 +387,7 @@ TEST(MaintenanceRuntimeTest, ExactReleasePersistsTombstoneBeforeOpeningAdmission
       std::string::npos);
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.GenerationExhaustionDoesNotCloseHealthyInactiveState 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, GenerationExhaustionDoesNotCloseHealthyInactiveState) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -386,6 +406,7 @@ TEST(MaintenanceRuntimeTest, GenerationExhaustionDoesNotCloseHealthyInactiveStat
   EXPECT_EQ(runtime.snapshot().generation, maximum);
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.InvalidCallerInputDoesNotLatchStoreFault 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, InvalidCallerInputDoesNotLatchStoreFault) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -417,6 +438,7 @@ TEST(MaintenanceRuntimeTest, InvalidCallerInputDoesNotLatchStoreFault) {
   EXPECT_TRUE(runtime.snapshot().gate_active);
 }
 
+// 辅助函数作用：为测试场景提供 maintenance_brake 所需的准备、执行或清理逻辑。
 FinalCommandEvidence maintenance_brake(
     const std::uint64_t generation,
     const std::uint64_t command_id) {
@@ -430,6 +452,7 @@ FinalCommandEvidence maintenance_brake(
   return command;
 }
 
+// 辅助函数作用：为测试场景提供 acknowledged_brake 所需的准备、执行或清理逻辑。
 CommandStatusEvidence acknowledged_brake(
     const std::uint64_t generation,
     const std::uint64_t command_id) {
@@ -442,6 +465,7 @@ CommandStatusEvidence acknowledged_brake(
   return status;
 }
 
+// 辅助函数作用：为测试场景提供 publisher 所需的准备、执行或清理逻辑。
 cleanbot::common::PublisherIdentity publisher(const std::uint8_t tag) {
   cleanbot::common::PublisherIdentity identity;
   identity.implementation_identifier = "rmw_fastrtps_cpp";
@@ -449,6 +473,7 @@ cleanbot::common::PublisherIdentity publisher(const std::uint8_t tag) {
   return identity;
 }
 
+// 辅助函数作用：为测试场景提供 stopped_hardware 所需的准备、执行或清理逻辑。
 MaintenanceHardwareSample stopped_hardware(
     const std::uint64_t frame_sequence) {
   MaintenanceHardwareSample sample;
@@ -457,6 +482,7 @@ MaintenanceHardwareSample stopped_hardware(
   return sample;
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.EvidenceRequiresTwoFramesAndStaleRefreshRevokesReady 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, EvidenceRequiresTwoFramesAndStaleRefreshRevokesReady) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";
@@ -488,6 +514,7 @@ TEST(MaintenanceRuntimeTest, EvidenceRequiresTwoFramesAndStaleRefreshRevokesRead
   EXPECT_EQ(runtime.snapshot().blocker_code, "HARDWARE_NOT_FRESH");
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.PublisherSwitchNeedsNewFramesAndRetiredPublisherIsIgnored 场景的行为、状态变化和边界条件。
 TEST(
     MaintenanceRuntimeTest,
     PublisherSwitchNeedsNewFramesAndRetiredPublisherIsIgnored) {
@@ -523,6 +550,7 @@ TEST(
   EXPECT_TRUE(runtime.snapshot().ready);
 }
 
+// 测试目的：验证 MaintenanceRuntimeTest.InvalidOrExhaustedPublisherRevokesReadiness 场景的行为、状态变化和边界条件。
 TEST(MaintenanceRuntimeTest, InvalidOrExhaustedPublisherRevokesReadiness) {
   TemporaryDirectory temporary;
   const auto state_path = temporary.path() / "maintenance.json";

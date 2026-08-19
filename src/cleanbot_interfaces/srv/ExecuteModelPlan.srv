@@ -1,3 +1,4 @@
+# 文件作用：定义提交已生成清扫计划执行的服务接口。
 string plan_id
 int32 brush_speed
 ---

@@ -1,3 +1,4 @@
+# 文件作用：验证 maintenance runtime 相关契约、运行逻辑和边界条件。
 import shutil
 import subprocess
 import tempfile
@@ -25,6 +26,7 @@ VSWHERE = (
     "Windows MSVC runtime test requires Visual Studio",
 )
 class MaintenanceRuntimeWindowsTest(unittest.TestCase):
+    # 类级初始化：准备共享的编译产物、临时目录和运行依赖。
     @classmethod
     def setUpClass(cls):
         for path in (HEADER, SOURCE, GATE_SOURCE, HARNESS):
@@ -58,7 +60,7 @@ class MaintenanceRuntimeWindowsTest(unittest.TestCase):
         compile_command = (
             "@echo off\n"
             f'call "{vcvars}" >nul && '
-            f'cl /nologo /std:c++17 /EHsc /W4 '
+            f'cl /nologo /std:c++17 /EHsc /W4 /utf-8 '
             f'/I"{include}" '
             f'/I"{common_include}" '
             f'"{HARNESS}" "{GATE_SOURCE}" "{SOURCE}" '
@@ -78,12 +80,14 @@ class MaintenanceRuntimeWindowsTest(unittest.TestCase):
                 + compiled.stderr.decode("utf-8", errors="replace")
             )
 
+    # 类级清理：释放共享的临时资源和外部进程。
     @classmethod
     def tearDownClass(cls):
         temporary = getattr(cls, "_temporary", None)
         if temporary is not None:
             temporary.cleanup()
 
+    # 断言辅助方法：集中检查 assert_case 对应结果是否满足测试约束。
     def assert_case(self, name):
         completed = subprocess.run(
             [str(self._executable), name],
@@ -96,60 +100,79 @@ class MaintenanceRuntimeWindowsTest(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
+    # 测试作用：验证“initial_state_is_fail_closed”场景的契约、输出结果和边界行为。
     def test_initial_state_is_fail_closed(self):
         self.assert_case("initial")
 
+    # 测试作用：验证“inactive_restore_opens_admission”场景的契约、输出结果和边界行为。
     def test_inactive_restore_opens_admission(self):
         self.assert_case("inactive")
 
+    # 测试作用：验证“active_restore_preserves_owner_and_has_no_evidence”场景的契约、输出结果和边界行为。
     def test_active_restore_preserves_owner_and_has_no_evidence(self):
         self.assert_case("active")
 
+    # 测试作用：验证“missing_load_latches_store_fault”场景的契约、输出结果和边界行为。
     def test_missing_load_latches_store_fault(self):
         self.assert_case("missing")
 
+    # 测试作用：验证“invalid_load_latches_store_fault”场景的契约、输出结果和边界行为。
     def test_invalid_load_latches_store_fault(self):
         self.assert_case("invalid")
 
+    # 测试作用：验证“unsupported_load_latches_store_fault”场景的契约、输出结果和边界行为。
     def test_unsupported_load_latches_store_fault(self):
         self.assert_case("unsupported")
 
+    # 测试作用：验证“io_load_latches_store_fault”场景的契约、输出结果和边界行为。
     def test_io_load_latches_store_fault(self):
         self.assert_case("io")
 
+    # 测试作用：验证“malformed_ok_record_latches_store_fault”场景的契约、输出结果和边界行为。
     def test_malformed_ok_record_latches_store_fault(self):
         self.assert_case("malformed")
 
+    # 测试作用：验证“second_initialize_is_idempotent_without_reread”场景的契约、输出结果和边界行为。
     def test_second_initialize_is_idempotent_without_reread(self):
         self.assert_case("duplicate")
 
+    # 测试作用：验证“mission_idle_forwards_after_restore”场景的契约、输出结果和边界行为。
     def test_mission_idle_forwards_after_restore(self):
         self.assert_case("mission_idle")
 
+    # 测试作用：验证“gate_restore_failure_latches_store_fault”场景的契约、输出结果和边界行为。
     def test_gate_restore_failure_latches_store_fault(self):
         self.assert_case("restore_failure")
 
+    # 测试作用：验证“enable_and_exact_release_transition”场景的契约、输出结果和边界行为。
     def test_enable_and_exact_release_transition(self):
         self.assert_case("transition")
 
+    # 测试作用：验证“same_owner_is_idempotent_and_other_owner_is_rejected”场景的契约、输出结果和边界行为。
     def test_same_owner_is_idempotent_and_other_owner_is_rejected(self):
         self.assert_case("idempotent")
 
+    # 测试作用：验证“generation_exhaustion_keeps_healthy_inactive_admission_open”场景的契约、输出结果和边界行为。
     def test_generation_exhaustion_keeps_healthy_inactive_admission_open(self):
         self.assert_case("exhausted")
 
+    # 测试作用：验证“uncertain_committed_activation_latches_fault_and_clamps”场景的契约、输出结果和边界行为。
     def test_uncertain_committed_activation_latches_fault_and_clamps(self):
         self.assert_case("uncertain_activate")
 
+    # 测试作用：验证“uncertain_committed_release_never_opens_admission”场景的契约、输出结果和边界行为。
     def test_uncertain_committed_release_never_opens_admission(self):
         self.assert_case("uncertain_release")
 
+    # 测试作用：验证“invalid_caller_input_does_not_latch_store_fault”场景的契约、输出结果和边界行为。
     def test_invalid_caller_input_does_not_latch_store_fault(self):
         self.assert_case("validation")
 
+    # 测试作用：验证“correlated_evidence_and_hardware_freshness”场景的契约、输出结果和边界行为。
     def test_correlated_evidence_and_hardware_freshness(self):
         self.assert_case("evidence")
 
+    # 测试作用：验证“publisher_switch_retirement_and_invalid_revocation”场景的契约、输出结果和边界行为。
     def test_publisher_switch_retirement_and_invalid_revocation(self):
         self.assert_case("publisher")
 

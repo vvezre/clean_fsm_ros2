@@ -1,3 +1,5 @@
+# 完整系统启动文件：按依赖顺序启动配置、控制、硬件、任务和定位节点。
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -6,6 +8,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    # 构造完整Cleanbot系统的ROS2启动描述。
     config_file = os.path.join(
         get_package_share_directory("cleanbot_bringup"),
         "config",

@@ -1,3 +1,4 @@
+# 文件作用：集中配置各 ROS 2 节点的运行参数。
 config_manager_node:
   ros__parameters:
     database_path: /var/lib/cleanbot/cleanbot.db

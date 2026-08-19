@@ -1,3 +1,7 @@
+/*
+ * 文件作用：建模管理节点实现：管理区域识别、采样、规划和任务提交流程。
+ * 说明：本文件只负责本模块的实现逻辑，输入输出和线程约束以对应头文件为准。
+ */
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -51,6 +55,7 @@ class ModelingManagerNode final : public rclcpp::Node {
       cleanbot_interfaces::srv::GenerateCleaningPlan;
   using ExecuteModelPlan = cleanbot_interfaces::srv::ExecuteModelPlan;
 
+  // 构造建模管理节点，建立采样、模型、规划服务及任务动作客户端。
   ModelingManagerNode() : Node("modeling_manager_node") {
     io_group_ = create_callback_group(
         rclcpp::CallbackGroupType::Reentrant);
@@ -82,6 +87,13 @@ class ModelingManagerNode final : public rclcpp::Node {
                 this,
                 std::placeholders::_1),
             subscription_options);
+
+    // 发布最近一次成功创建、加载或修改的模型，供RViz/Foxglove只读显示。
+    // 使用瞬态本地QoS，调试工具晚启动时也能立即收到最新模型。
+    model_publisher_ =
+        create_publisher<cleanbot_interfaces::msg::CleaningModel>(
+            "/modeling/model",
+            common::latched_status_qos());
 
     manage_service_ = create_service<ManageCleaningModel>(
         "/modeling/manage",
@@ -156,6 +168,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     RtkSample sample;
   };
 
+  // 将内部模型点转换为 ROS2 消息，保留坐标、顺序和采样元数据。
   static cleanbot_interfaces::msg::ModelPoint toRosPoint(
       const ModelPoint& point) {
     cleanbot_interfaces::msg::ModelPoint output;
@@ -178,6 +191,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     return output;
   }
 
+  // 将完整内部清扫模型递归转换为可发布的 ROS2 模型消息。
   static cleanbot_interfaces::msg::CleaningModel toRosModel(
       const CleaningModel& model) {
     cleanbot_interfaces::msg::CleaningModel output;
@@ -228,6 +242,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     return output;
   }
 
+  // 将规划器生成的内部路径段转换为任务节点可执行的任务段消息。
   static cleanbot_interfaces::msg::TaskSegment toRosSegment(
       const PlanSegment& segment) {
     cleanbot_interfaces::msg::TaskSegment output;
@@ -250,6 +265,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     return output;
   }
 
+  // 将内部清扫计划及其全部路径段转换为 ROS2 计划消息。
   static cleanbot_interfaces::msg::CleaningPlan toRosPlan(
       const CleaningPlan& plan) {
     cleanbot_interfaces::msg::CleaningPlan output;
@@ -272,6 +288,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     return output;
   }
 
+  // 使用 ROS 时间和进程内递增序号生成不重复的模型对象标识。
   std::string makeId(const std::string& prefix) {
     const auto sequence = ++id_sequence_;
     return prefix + "-" + std::to_string(now().nanoseconds()) +
@@ -335,6 +352,7 @@ class ModelingManagerNode final : public rclcpp::Node {
         initial ? "" : " after configuration refresh");
   }
 
+  // 缓存最新硬件状态并唤醒正在等待可用采样条件的服务回调。
   void onHardwareStatus(
       const cleanbot_interfaces::msg::HardwareStatus::SharedPtr message) {
     {
@@ -345,6 +363,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     sample_condition_.notify_all();
   }
 
+  // 接收 RTK 定位结果，整理成建模采样数据并更新采样队列。
   void onRtkFix(
       const cleanbot_interfaces::msg::RtkFix::SharedPtr message) {
     std::lock_guard<std::mutex> lock(state_mutex_);
@@ -370,40 +389,47 @@ class ModelingManagerNode final : public rclcpp::Node {
     sample_condition_.notify_all();
   }
 
+  // 按分组标识在模型中查找可修改的分组；未找到时返回空指针。
   static ModelGroup* findGroup(
       CleaningModel& model,
       const std::string& group_id) {
     const auto found = std::find_if(
         model.groups.begin(), model.groups.end(),
+        // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
         [&group_id](const ModelGroup& group) {
           return group.id == group_id;
         });
     return found == model.groups.end() ? nullptr : &(*found);
   }
 
+  // 汇总各分组和子区域确认状态，刷新模型整体识别确认标志。
   static void updateConfirmation(CleaningModel& model) {
     model.recognition_confirmed =
         !model.groups.empty() &&
         std::all_of(
             model.groups.begin(),
             model.groups.end(),
+            // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
             [](const ModelGroup& group) {
               return !group.sub_areas.empty() &&
                   std::all_of(
                       group.sub_areas.begin(),
                       group.sub_areas.end(),
+                      // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
                       [](const ModelSubArea& area) {
                         return area.confirmed;
                       }) &&
                   std::all_of(
                       group.connectors.begin(),
                       group.connectors.end(),
+                      // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
                       [](const ModelConnector& connector) {
                         return connector.confirmed;
                       });
             });
   }
 
+  // 在模型点变化后清除旧识别结果，强制后续重新执行区域识别。
   static void invalidateRecognition(ModelGroup& group) {
     group.sub_areas.clear();
     group.connectors.clear();
@@ -412,6 +438,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     group.recognition_confidence = 0.0;
   }
 
+  // 统一填写模型管理服务的失败响应，确保错误码和说明保持一致。
   void failManage(
       const std::shared_ptr<ManageCleaningModel::Response>& response,
       const std::string& code,
@@ -508,6 +535,7 @@ class ModelingManagerNode final : public rclcpp::Node {
             std::remove_if(
                 model.groups.begin(),
                 model.groups.end(),
+                // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
                 [&request](const ModelGroup& group) {
                   return group.id == request->group_id;
                 }),
@@ -540,6 +568,7 @@ class ModelingManagerNode final : public rclcpp::Node {
             std::remove_if(
                 group->points.begin(),
                 group->points.end(),
+                // 筛选谓词作用：检查当前元素是否符合查找、确认或删除条件。
                 [&request](const ModelPoint& point) {
                   return point.id == request->point_id;
                 }),
@@ -644,6 +673,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     response->code = "OK";
     response->message = "model operation completed";
     response->model = toRosModel(model);
+    model_publisher_->publish(response->model);
   }
 
   // 等待一组新的 RTK 采样，生成稳定点位后写回草稿模型。
@@ -670,10 +700,12 @@ class ModelingManagerNode final : public rclcpp::Node {
       const std::uint64_t first_sequence = rtk_sequence_;
       const auto deadline =
           std::chrono::steady_clock::now() + std::chrono::seconds(3);
+      // 等待谓词作用：判断取消、故障、状态更新或恢复条件是否已经满足。
       sample_condition_.wait_until(lock, deadline, [this, first_sequence]() {
         const auto count = static_cast<std::size_t>(std::count_if(
             sample_buffer_.begin(),
             sample_buffer_.end(),
+            // 匿名函数作用：封装当前局部回调或判定逻辑，供调用方在本作用域内执行。
             [first_sequence](const BufferedSample& sample) {
               return sample.sequence > first_sequence;
             }));
@@ -861,6 +893,7 @@ class ModelingManagerNode final : public rclcpp::Node {
     }
 
     const auto apply_submission =
+        // 匿名函数作用：封装当前局部回调或判定逻辑，供调用方在本作用域内执行。
         [&response](const GoalSubmissionDecision& decision) {
           response->accepted = decision.accepted;
           response->code = decision.code;
@@ -890,6 +923,7 @@ class ModelingManagerNode final : public rclcpp::Node {
           }
         };
     options.result_callback =
+        // 动作回调作用：处理任务最终结果，并更新计划执行响应。
         [this](const auto& result) {
           if (result.code != rclcpp_action::ResultCode::SUCCEEDED) {
             RCLCPP_WARN(
@@ -953,6 +987,8 @@ class ModelingManagerNode final : public rclcpp::Node {
       rtk_subscription_;
   rclcpp::Subscription<cleanbot_interfaces::msg::HardwareStatus>::SharedPtr
       hardware_subscription_;
+  rclcpp::Publisher<cleanbot_interfaces::msg::CleaningModel>::SharedPtr
+      model_publisher_;
   rclcpp::Service<ManageCleaningModel>::SharedPtr manage_service_;
   rclcpp::Service<SampleModelPoint>::SharedPtr sample_service_;
   rclcpp::Service<GenerateCleaningPlan>::SharedPtr generate_service_;
@@ -963,6 +999,7 @@ class ModelingManagerNode final : public rclcpp::Node {
 }  // namespace modeling
 }  // namespace cleanbot
 
+// 程序入口：初始化 ROS2，并用多线程执行器运行建模管理节点。
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<cleanbot::modeling::ModelingManagerNode>();

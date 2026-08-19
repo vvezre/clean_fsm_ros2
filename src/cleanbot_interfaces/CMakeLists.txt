@@ -1,3 +1,4 @@
+# 文件作用：ROS 消息、服务和动作接口的生成规则。
 cmake_minimum_required(VERSION 3.8)
 project(cleanbot_interfaces)
 

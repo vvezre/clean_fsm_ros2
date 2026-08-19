@@ -1,3 +1,4 @@
+# 文件作用：定义 RTK 固定解、航向、差分链路和坐标有效性消息。
 uint8 FIX_INVALID=0
 uint8 FIX_SINGLE=1
 uint8 FIX_DIFFERENTIAL=2

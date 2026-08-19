@@ -10,9 +10,11 @@
 #include "cleanbot_interfaces/msg/task_segment.hpp"
 #include "cleanbot_interfaces/msg/waypoint.hpp"
 
+// 文件作用：声明任务执行进度检查点的序列化、恢复和清理接口。
 namespace cleanbot {
 namespace mission {
 
+// 可持久化的任务执行进度、计划和目标点记录。
 struct MissionCheckpointRecord {
   std::string run_id;
   std::string mission_kind;
@@ -48,15 +50,21 @@ struct MissionCheckpointRecord {
 
 class MissionCheckpointStore {
  public:
+  // 使用指定检查点文件路径创建存储对象。
   explicit MissionCheckpointStore(std::filesystem::path checkpoint_path);
 
+  // 返回实际使用的检查点文件路径。
   const std::filesystem::path& checkpoint_path() const;
+  // 保存当前任务检查点；失败信息可通过 error 返回。
   bool save(const MissionCheckpointRecord& record, std::string* error = nullptr) const;
+  // 读取最近一次检查点；不存在或错误时返回空值。
   std::optional<MissionCheckpointRecord> load_latest(std::string* error = nullptr) const;
+  // 删除已完成或已取消任务的检查点。
   bool clear(std::string* error = nullptr) const;
 
  private:
   std::filesystem::path checkpoint_path_;
+  // 取得用于记录创建和更新时间的当前毫秒时间戳。
   static std::int64_t now_milliseconds();
 };
 

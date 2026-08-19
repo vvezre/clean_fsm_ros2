@@ -1,3 +1,4 @@
+# 文件作用：定义仲裁后的车辆运动、刷盘、制动和充电控制消息。
 uint8 PRIORITY_IDLE=0
 uint8 PRIORITY_VISION=20
 uint8 PRIORITY_MISSION=40

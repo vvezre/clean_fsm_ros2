@@ -1,3 +1,4 @@
+// 文件作用：为对应模块的核心算法、协议处理和边界条件提供单元测试。
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -11,6 +12,7 @@
 
 namespace {
 
+// 辅助函数作用：通过 command 构造当前测试所需的输入数据。
 cleanbot::control::ControlCommand command(
     const char* source,
     const std::uint64_t command_id,
@@ -36,6 +38,7 @@ cleanbot::control::ControlCommand command(
   return result;
 }
 
+// 辅助函数作用：为测试场景提供 publisherIdentity 所需的准备、执行或清理逻辑。
 cleanbot::common::PublisherIdentity publisherIdentity(
     std::string implementation_identifier,
     std::initializer_list<std::uint8_t> gid) {
@@ -44,6 +47,7 @@ cleanbot::common::PublisherIdentity publisherIdentity(
       std::vector<std::uint8_t>(gid)};
 }
 
+// 辅助函数作用：封装 expectMaintenanceOutput 对应的测试断言，统一核对预期结果。
 void expectMaintenanceOutput(
     const cleanbot::control::ControlCommand& output,
     const std::uint64_t generation) {
@@ -66,6 +70,7 @@ void expectMaintenanceOutput(
 
 }  // namespace
 
+// 测试目的：验证 CommandArbiterCore.EmergencyClearsBrushAndRequiresFreshIntent 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, EmergencyClearsBrushAndRequiresFreshIntent) {
   cleanbot::control::CommandArbiterCore arbiter;
   arbiter.set_brush(true, 60, true);
@@ -79,6 +84,7 @@ TEST(CommandArbiterCore, EmergencyClearsBrushAndRequiresFreshIntent) {
   EXPECT_EQ(arbiter.output(0u).brush_speed, 0);
 }
 
+// 测试目的：验证 CommandArbiterCore.MaintenanceClearsEverySlotAndBrushAndEmitsOnlyBrake 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, MaintenanceClearsEverySlotAndBrushAndEmitsOnlyBrake) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_TRUE(arbiter.update(
@@ -110,6 +116,7 @@ TEST(CommandArbiterCore, MaintenanceClearsEverySlotAndBrushAndEmitsOnlyBrake) {
   EXPECT_EQ(released.brush_speed, 0);
 }
 
+// 测试目的：验证 CommandArbiterCore.ActiveGenerationSwitchStaysClampedAndResetsOperatorMode 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, ActiveGenerationSwitchStaysClampedAndResetsOperatorMode) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_TRUE(arbiter.update(
@@ -148,6 +155,7 @@ TEST(CommandArbiterCore, ActiveGenerationSwitchStaysClampedAndResetsOperatorMode
   EXPECT_EQ(resumed.brush_speed, 0);
 }
 
+// 测试目的：验证 CommandArbiterCore.MaintenanceRejectsOrdinaryMotionAndBrushUntilRelease 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, MaintenanceRejectsOrdinaryMotionAndBrushUntilRelease) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_TRUE(arbiter.set_maintenance(true, 7u));
@@ -174,6 +182,7 @@ TEST(CommandArbiterCore, MaintenanceRejectsOrdinaryMotionAndBrushUntilRelease) {
   EXPECT_EQ(released.brush_speed, 0);
 }
 
+// 测试目的：验证 CommandArbiterCore.EmergencyReceivedDuringMaintenanceSurvivesRelease 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, EmergencyReceivedDuringMaintenanceSurvivesRelease) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_TRUE(arbiter.set_maintenance(true, 9u));
@@ -191,6 +200,7 @@ TEST(CommandArbiterCore, EmergencyReceivedDuringMaintenanceSurvivesRelease) {
   EXPECT_EQ(released.priority, 100u);
 }
 
+// 测试目的：验证 CommandArbiterCore.MaintenanceReleasePreservesExistingSoftwareStop 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, MaintenanceReleasePreservesExistingSoftwareStop) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_TRUE(arbiter.update(
@@ -206,6 +216,7 @@ TEST(CommandArbiterCore, MaintenanceReleasePreservesExistingSoftwareStop) {
   EXPECT_EQ(arbiter.output(3u).source, "software_emergency_stop");
 }
 
+// 测试目的：验证 CommandArbiterCore.MaintenanceGenerationIsStrictAndCannotBeReused 场景的行为、状态变化和边界条件。
 TEST(CommandArbiterCore, MaintenanceGenerationIsStrictAndCannotBeReused) {
   cleanbot::control::CommandArbiterCore arbiter;
   EXPECT_FALSE(arbiter.set_maintenance(true, 0u));
@@ -236,6 +247,7 @@ TEST(CommandArbiterCore, MaintenanceGenerationIsStrictAndCannotBeReused) {
   EXPECT_FALSE(max_arbiter.set_maintenance(true, maximum - 1u));
 }
 
+// 测试目的：验证 MaintenanceGateCache.MismatchedInactiveCannotReplaceActiveGeneration 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGateCache, MismatchedInactiveCannotReplaceActiveGeneration) {
   cleanbot::control::MaintenanceGateCache cache;
   EXPECT_TRUE(cache.update(true, 10u));
@@ -251,6 +263,7 @@ TEST(MaintenanceGateCache, MismatchedInactiveCannotReplaceActiveGeneration) {
   EXPECT_EQ(cache.generation(), 10u);
 }
 
+// 测试目的：验证 MaintenanceGateCache.ReleasedAndInvalidGenerationsCannotBeReused 场景的行为、状态变化和边界条件。
 TEST(MaintenanceGateCache, ReleasedAndInvalidGenerationsCannotBeReused) {
   cleanbot::control::MaintenanceGateCache cache;
   EXPECT_FALSE(cache.update(true, 0u));
@@ -273,6 +286,7 @@ TEST(MaintenanceGateCache, ReleasedAndInvalidGenerationsCannotBeReused) {
   EXPECT_EQ(cache.generation(), 6u);
 }
 
+// 测试目的：验证 MaintenancePublisherCoordinator.PublisherRestartForcesExactlyOneReissueAndRetiresOldPublisher 场景的行为、状态变化和边界条件。
 TEST(
     MaintenancePublisherCoordinator,
     PublisherRestartForcesExactlyOneReissueAndRetiresOldPublisher) {
@@ -312,6 +326,7 @@ TEST(
   EXPECT_FALSE(retired_a.force_republish);
 }
 
+// 测试目的：验证 MaintenancePublisherCoordinator.InvalidUnknownStateDoesNotPoisonCurrentPublisherOrGate 场景的行为、状态变化和边界条件。
 TEST(
     MaintenancePublisherCoordinator,
     InvalidUnknownStateDoesNotPoisonCurrentPublisherOrGate) {
@@ -351,6 +366,7 @@ TEST(
   EXPECT_EQ(retired_b.generation, 11u);
 }
 
+// 测试目的：验证 MaintenancePublisherCoordinator.NewPublisherCanCommitExactReleaseWithoutForcingReissue 场景的行为、状态变化和边界条件。
 TEST(
     MaintenancePublisherCoordinator,
     NewPublisherCanCommitExactReleaseWithoutForcingReissue) {
@@ -373,6 +389,7 @@ TEST(
   EXPECT_FALSE(repeated_release.force_republish);
 }
 
+// 测试目的：验证 MaintenancePublisherCoordinator.UntrackableIdentityOnlyEstablishesInitialActiveClamp 场景的行为、状态变化和边界条件。
 TEST(
     MaintenancePublisherCoordinator,
     UntrackableIdentityOnlyEstablishesInitialActiveClamp) {
@@ -434,6 +451,7 @@ TEST(
   EXPECT_FALSE(inactive_coordinator.has_state());
 }
 
+// 测试目的：验证 MaintenancePublisherCoordinator.TrackerCapacityExhaustionDoesNotMutateGateOrCurrentPublisher 场景的行为、状态变化和边界条件。
 TEST(
     MaintenancePublisherCoordinator,
     TrackerCapacityExhaustionDoesNotMutateGateOrCurrentPublisher) {

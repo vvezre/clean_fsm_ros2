@@ -1,3 +1,4 @@
+# 文件作用：在 GitHub Actions 中校验并发布 Cleanbot ARM64 稳定版本制品。
 name: ARM64 stable release
 
 on:
